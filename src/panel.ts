@@ -1,5 +1,5 @@
 import { ActiveSelection, Circle, Color, Ellipse, FabricImage, Line, Path, Polygon, Rect, Triangle, type FabricObject, type Textbox } from 'fabric';
-import type { Editor } from './editor';
+import type { Editor, MetaKey } from './editor';
 import { FONT_FAMILIES, isBold } from './fonts';
 import { columnRects } from './layout';
 import { isRound, isText, makeRound, shapeClip } from './shapes';
@@ -50,6 +50,8 @@ function sections(nodes: Node[]): Node[] {
 }
 
 export interface PanelActions {
+  /** Propriétés du PDF déduites du contenu (remplissage rapide), ou `null` hors modèle relié. */
+  autoMeta(): Record<MetaKey, string> | null;
   /** Ajoute une nouvelle image sur la page. */
   addImage(): void;
   replaceImage(img: FabricImage): void;
@@ -379,35 +381,55 @@ export class Panel {
     return nodes;
   }
 
+  /**
+   * Propriété du PDF : remplie automatiquement depuis le contenu (remplissage rapide) tant qu'on ne la
+   * modifie pas ; modifiée à la main, elle est conservée et un bouton « Auto » la rend de nouveau automatique.
+   */
+  private metaField(key: MetaKey, label: string, el: HTMLInputElement | HTMLTextAreaElement) {
+    const ed = this.ed;
+    const reset = h('button', { type: 'button', class: 'meta-auto', title: 'Revenir à la valeur déduite du contenu' }, '↺ Auto');
+    const tag = h('em', { class: 'meta-tag' });
+    el.addEventListener('input', () => {
+      ed.meta[key] = el.value;
+      // Valeur identique à la valeur automatique : le champ reste automatique.
+      const auto = this.actions.autoMeta()?.[key];
+      ed.meta.manual = { ...ed.meta.manual };
+      if (auto !== undefined && el.value === auto) delete ed.meta.manual[key];
+      else ed.meta.manual[key] = true;
+      ed.dirty = true;
+      sync();
+    });
+    reset.addEventListener('click', () => {
+      const auto = this.actions.autoMeta();
+      if (!auto) return;
+      ed.meta.manual = { ...ed.meta.manual };
+      delete ed.meta.manual[key];
+      ed.meta[key] = auto[key];
+      ed.dirty = true;
+      this.refresh();
+    });
+    const sync = () => {
+      const linked = !!this.actions.autoMeta();
+      const manual = !!ed.meta.manual?.[key];
+      reset.hidden = !linked || !manual;
+      tag.textContent = linked ? (manual ? ' · modifié à la main' : ' · automatique') : '';
+      tag.classList.toggle('manual', manual);
+    };
+    this.refreshers.push(() => {
+      if (document.activeElement !== el) el.value = ed.meta[key];
+      sync();
+    });
+    return h('label', { class: 'field' }, h('span', { class: 'meta-label' }, h('span', {}, label, tag), reset), el);
+  }
+
   private documentPanel(): Node[] {
     const ed = this.ed;
     const c = ed.canvas;
     const title = h('input', { type: 'text', placeholder: 'Document', maxLength: 300 });
     const author = h('input', { type: 'text', placeholder: '(vide)', maxLength: 300 });
     const subject = h('textarea', { rows: 3, placeholder: 'Ex. : Développeur full-stack, 6 ans d’expérience, PHP / React', maxLength: 1000 });
-    const keywords = h('input', { type: 'text', placeholder: 'Ex. : PHP, Symfony, React, gestion de projet', maxLength: 1000 });
-    subject.addEventListener('input', () => {
-      ed.meta.subject = subject.value;
-      ed.dirty = true;
-    });
-    keywords.addEventListener('input', () => {
-      ed.meta.keywords = keywords.value;
-      ed.dirty = true;
-    });
-    title.addEventListener('input', () => {
-      ed.meta.title = title.value;
-      ed.dirty = true;
-    });
-    author.addEventListener('input', () => {
-      ed.meta.author = author.value;
-      ed.dirty = true;
-    });
-    this.refreshers.push(() => {
-      title.value = ed.meta.title;
-      author.value = ed.meta.author;
-      subject.value = ed.meta.subject;
-      keywords.value = ed.meta.keywords;
-    });
+    const keywords = h('textarea', { rows: 2, placeholder: 'Ex. : PHP, Symfony, React, gestion de projet', maxLength: 1000 });
+    const linked = !!this.actions.autoMeta();
     const nodes = [
       h('h2', { class: 'title' }, 'Document'),
       h('h2', {}, 'Insérer'),
@@ -415,11 +437,12 @@ export class Panel {
       h('h2', {}, 'Page'),
       this.color('Fond de page', () => c.backgroundColor, (v) => c.set('backgroundColor', v ?? '#ffffff')),
       h('h2', {}, 'Propriétés du PDF'),
-      h('label', { class: 'field' }, h('span', {}, 'Titre'), title),
-      h('label', { class: 'field' }, h('span', {}, 'Auteur'), author),
-      h('label', { class: 'field' }, h('span', {}, 'Résumé (sujet)'), subject),
-      h('label', { class: 'field' }, h('span', {}, 'Mots-clés'), keywords),
-      h('p', { class: 'hint' }, 'Ces informations sont intégrées au fichier PDF. Laissez l’auteur vide pour ne rien divulguer.'),
+      linked && h('p', { class: 'hint' }, 'Remplies automatiquement depuis le contenu (onglet « Contenu ») : elles suivent vos modifications. Un champ modifié à la main est conservé.'),
+      this.metaField('title', 'Titre', title),
+      this.metaField('author', 'Auteur', author),
+      this.metaField('subject', 'Résumé (sujet)', subject),
+      this.metaField('keywords', 'Mots-clés', keywords),
+      h('p', { class: 'hint' }, 'Ces informations sont intégrées au fichier PDF et lues par les logiciels de recrutement. Videz l’auteur pour ne pas l’indiquer.'),
       h('h2', {}, 'Astuces'),
       h('p', { class: 'hint' }, 'Double-cliquez sur un texte pour le modifier, sur une image pour la remplacer. Sélectionnez une partie du texte pour la mettre en gras ou la colorer.'),
       h('p', { class: 'hint' }, 'Glissez-déposez ou collez une image directement sur la page.'),
@@ -428,7 +451,7 @@ export class Panel {
       h('p', { class: 'hint' }, 'Tout est traité dans votre navigateur : aucun envoi, aucun cookie, aucun stockage. Fermer la page efface tout — pensez à enregistrer votre projet.'),
     ];
     queueMicrotask(() => this.refresh());
-    return nodes;
+    return nodes.filter((n): n is Exclude<typeof n, false> => n !== false);
   }
 
   private objectPanel(a: FabricObject): Node[] {

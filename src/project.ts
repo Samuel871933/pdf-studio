@@ -2,8 +2,11 @@
 // télécharge son projet en .json et le rouvre quand il le souhaite. Le fichier ouvert
 // est traité comme non fiable : seules les propriétés et types connus sont conservés.
 import { DEFAULT_FONT, isFontFamily } from './fonts';
-import type { CanvasJSON, DocMeta } from './editor';
+import { META_KEYS, type CanvasJSON, type DocMeta } from './editor';
 import { sanitizeLayout, type ColumnLayout } from './layout';
+import type { FillState } from './quickfill';
+import { PALETTES, TEMPLATES } from './templates';
+import { sanitizePersona } from './templates/content';
 
 const APP = 'pdf-studio';
 const FORMAT = 1;
@@ -22,10 +25,12 @@ export interface ProjectFile {
   meta: DocMeta;
   canvas: CanvasJSON;
   layout?: ColumnLayout | null;
+  /** Remplissage rapide : modèle, palette et fiche. */
+  fill?: FillState | null;
 }
 
-export function serializeProject(canvas: CanvasJSON, meta: DocMeta, layout: ColumnLayout): Blob {
-  const file: ProjectFile = { app: APP, format: FORMAT, meta, canvas, layout };
+export function serializeProject(canvas: CanvasJSON, meta: DocMeta, layout: ColumnLayout, fill: FillState | null = null): Blob {
+  const file: ProjectFile = { app: APP, format: FORMAT, meta, canvas, layout, fill };
   return new Blob([JSON.stringify(file)], { type: 'application/json' });
 }
 
@@ -49,6 +54,10 @@ function cleanObject(o: unknown, depth = 0): Obj | null {
   out.fill = cleanColor(o.fill);
   out.stroke = cleanColor(o.stroke);
   out.backgroundColor = cleanColor(o.backgroundColor);
+  // Liaison au remplissage rapide : adresse de champ et codec en texte simple.
+  if (typeof o.field !== 'string' || !/^[a-z0-9.]{1,60}$/i.test(o.field)) delete out.field;
+  if (typeof o.codec !== 'string' || !/^[a-z]{1,30}$/i.test(o.codec)) delete out.codec;
+  out.tpl = o.tpl === true;
   // Groupe logique : identifiant et nom courts, en texte simple.
   if (typeof o.groupId === 'string' && /^[a-z0-9]{1,40}$/i.test(o.groupId)) out.groupName = cleanText(o.groupName, 60) || 'Groupe';
   else {
@@ -85,6 +94,16 @@ function cleanObject(o: unknown, depth = 0): Obj | null {
   return out;
 }
 
+/** Remplissage rapide d'un fichier ouvert : modèle et palette connus, fiche validée champ par champ. */
+function cleanFill(v: unknown): FillState | null {
+  if (!isObj(v)) return null;
+  const template = TEMPLATES.find((t) => t.id === v.template)?.id;
+  const data = sanitizePersona(v.data);
+  if (!template || !data) return null;
+  const palette = PALETTES.find((p) => p.id === v.palette)?.id ?? PALETTES[0].id;
+  return { template, palette, data, linked: v.linked === true, touched: v.touched !== false };
+}
+
 export async function readProject(file: File): Promise<{ project: ProjectFile; dropped: number }> {
   if (file.size > MAX_BYTES) throw new Error('Fichier trop volumineux.');
   let data: unknown;
@@ -109,9 +128,13 @@ export async function readProject(file: File): Promise<{ project: ProjectFile; d
         subject: cleanText(meta.subject, 1000),
         keywords: cleanText(meta.keywords, 1000),
         kind: meta.kind === 'cv' || meta.kind === 'letter' ? meta.kind : undefined,
+        manual: isObj(meta.manual)
+          ? Object.fromEntries(META_KEYS.filter((k) => (meta.manual as Obj)[k] === true).map((k) => [k, true]))
+          : undefined,
       },
       canvas: { background: cleanColor(data.canvas.background) ?? '#ffffff', objects },
       layout: sanitizeLayout(data.layout),
+      fill: cleanFill(data.fill),
     },
     dropped: data.canvas.objects.length - objects.length,
   };

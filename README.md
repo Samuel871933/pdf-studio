@@ -6,8 +6,15 @@
 
 ## Fonctionnalités
 
-- **9 modèles** (données fictives) et **6 palettes** : Classique, Hybride, Chronologique, Junior / Alternance (une colonne, idéaux pour les ATS), Bandeau, Tech (deux colonnes), Barre latérale (graphique), Lettre de motivation assortie et Lettre classique
+- **10 modèles** (données fictives) et **7 palettes** : Classique, Hybride, Chronologique, Junior / Alternance (une colonne, idéaux pour les ATS), Bandeau, Tech (deux colonnes), Barre latérale et Organique (graphiques), Lettre de motivation assortie et Lettre classique
 - Mise en page automatique des modèles : les sections se répartissent sur la page, sans chevauchement, et le texte est écrit dans l'ordre de lecture (important pour les ATS)
+- **Remplissage rapide** (onglet « Contenu ») : un formulaire pour l'identité, la photo, le profil, les expériences, formations, réalisations, compétences, outils, langues, centres d'intérêt et la lettre ; la page se compose en direct
+  - on ajoute, supprime et réordonne les expériences, formations, compétences… et la mise en page suit
+  - la fiche est conservée quand on change de modèle (les miniatures de la galerie la montrent) et enregistrée dans le projet
+  - modifier un texte sur la page met aussi la fiche à jour ; les éléments ajoutés à la main sont conservés
+  - si le contenu ne tient pas, les espacements se resserrent, puis une alerte indique la section qui dépasse
+  - « Détacher » arrête le lien pour finir le design librement
+  - les **propriétés du PDF** se remplissent toutes seules (titre « CV – Nom – Poste », auteur, résumé, mots-clés) ; un champ modifié à la main est conservé, « ↺ Auto » le rend de nouveau automatique
 - Modèles **déjà organisés en groupes** (une section = un groupe) ; les fonds communs sont dans un groupe « Arrière-plan » verrouillé
 - **Panneau Calques** (repliable) : la pile des éléments, du premier plan à l'arrière-plan
   - clic pour sélectionner (Maj / Ctrl : ajouter), glisser-déposer pour changer de plan
@@ -55,7 +62,7 @@ Il compare aussi le document à une **offre d'emploi** collée : pourcentage de 
 | Aucun stockage | Pas de cookie, `localStorage` ni IndexedDB : fermer la page efface tout (une alerte prévient s'il y a des modifications) |
 | Images assainies | Décodées puis ré-encodées via un canvas, ce qui supprime les EXIF/GPS et tout contenu caché ; taille limitée. Les SVG ne sont jamais affichés tels quels : seule leur géométrie est extraite (icônes) |
 | Projets validés | À l'ouverture, seuls les types et propriétés connus sont conservés ; les URL externes et les motifs sont rejetés |
-| Métadonnées PDF | L'auteur reste vide par défaut |
+| Métadonnées PDF | Sans modèle relié, l'auteur reste vide ; avec le remplissage rapide, il reprend le nom saisi (modifiable ou effaçable) |
 
 ## Optimisation
 
@@ -93,7 +100,9 @@ src/
   panel.ts        Panneau de propriétés
   shapes.ts       Formes et icônes de base
   layout.ts       Colonnages (repères, magnétisme)
-  templates/      Modèles : palettes et moteur de mise en page (kit.ts), contenus fictifs, modèles, conseils
+  quickfill.ts    Remplissage rapide : régénération de la page depuis la fiche, synchronisation des textes
+  templates/      Modèles : palettes et moteur de mise en page (kit.ts), fiche et exemples fictifs (content.ts),
+                  liaison texte ↔ champ (fields.ts), modèles, conseils
   icons/          Bibliothèque d'icônes (chargement, recherche) et import SVG sécurisé
   ui/             Fenêtres et panneaux : galerie de modèles, bibliothèque d'icônes, calques, barre flottante, barre du bas, analyse IA
   reading.ts      Ordre de lecture (détection des colonnes), rôles des textes, liens
@@ -103,7 +112,7 @@ src/
   export-pdf.ts   Conversion des objets en opérateurs PDF
   pdf/document.ts Écriture du fichier PDF (objets, polices Type0, images, compression)
   pdf/ttf.ts      Lecture des polices TrueType
-  fonts/          Lato, Montserrat, Arima (licence SIL OFL, réduites au jeu latin)
+  fonts/          Lato, Montserrat, Arima, Poppins, DM Serif Display (licence SIL OFL, réduites au jeu latin)
 ```
 
 ## Choix des modèles (recherches)

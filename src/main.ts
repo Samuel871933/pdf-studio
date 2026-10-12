@@ -11,6 +11,9 @@ import { setupBottomBar, showShortcuts } from './ui/bottombar';
 import { openGallery } from './ui/gallery';
 import { openIconPicker, type IconPick } from './ui/icon-picker';
 import { setupLayers } from './ui/layers';
+import { setupContentForm } from './ui/content-form';
+import { setupSidePanel } from './ui/sidepanel';
+import { QuickFill, type FillState } from './quickfill';
 import { setupQuickBar } from './ui/quickbar';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -32,13 +35,23 @@ const fail = (e: unknown) => toast(e instanceof Error ? e.message : 'Une erreur 
 const stage = $('stage');
 const ed = new Editor($<HTMLCanvasElement>('page'), stage);
 const panel = new Panel($('panel'), ed, {
+  autoMeta: () => (qf.state?.linked ? qf.autoMeta() : null),
   addImage: () => pickImage(),
   replaceImage: (img) => pickImage(img),
   fillShape: (shape) => pickImage(shape),
   replaceIcon: (icon) => pickIcon(icon),
 });
 const bottomBar = setupBottomBar(ed);
-const layers = setupLayers(ed, $('layers'), $<HTMLButtonElement>('btn-layers'));
+const qf = new QuickFill(ed);
+// Panneau de gauche : Contenu (remplissage rapide) et Calques.
+const side = setupSidePanel($('layers'), [
+  { id: 'content', label: 'Contenu', icon: 'text', button: $<HTMLButtonElement>('btn-content'), onShow: () => form.render() },
+  { id: 'layers', label: 'Calques', icon: 'layers', button: $<HTMLButtonElement>('btn-layers'), onShow: () => layers.refresh() },
+], 'content');
+const layers = setupLayers(ed, side.pane('layers'), side.badge('layers'), () => side.isShown('layers'));
+const form = setupContentForm(side.pane('content'), qf, { chooseTemplate: () => chooseTemplate() });
+ed.onRestore = () => form.render();
+side.start();
 const quickBar = setupQuickBar(ed, stage);
 ed.onHelp = showShortcuts;
 ed.onAidsChange = () => panel.render();
@@ -223,28 +236,60 @@ document.querySelector('.tools')!.addEventListener('click', (e) => {
 const confirmDiscard = () =>
   !ed.dirty || confirm('Les modifications non enregistrées seront perdues. Continuer ?');
 
-async function loadDoc(json: CanvasJSON, meta = emptyMeta()) {
+/** Document libre (page vierge, projet sans fiche) : pas de remplissage rapide. */
+async function loadDoc(json: CanvasJSON, meta = emptyMeta(), fill: FillState | null = null) {
+  qf.clear();
+  ed.fill = fill;
   ed.meta = meta;
   await ed.load(json);
   panel.render();
+  form.render();
 }
 
+/** Modèle relié au formulaire : la fiche en cours est conservée si elle a été remplie. */
 async function loadTemplate(id: string, p: Palette) {
   const def = TEMPLATES.find((t) => t.id === id) ?? TEMPLATES[0];
   palette = p;
-  await loadDoc(await def.build(p), emptyMeta(def.docTitle, def.kind));
+  // Fiche déjà remplie : les propriétés modifiées à la main sont conservées, les autres suivent le contenu.
+  ed.meta = qf.state?.touched ? { ...ed.meta, kind: def.kind } : emptyMeta(def.docTitle, def.kind);
+  await qf.start(def, p.id);
+  panel.render();
+  form.render();
+}
+
+/** Empreinte courte d'un texte (clé de cache des miniatures). */
+function hash(str: string): string {
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+
+function chooseTemplate() {
+  const s = qf.state;
+  openGallery({
+    palette,
+    data: s?.touched ? { persona: s.data, key: hash(JSON.stringify(s.data)) } : undefined,
+    onChoose: (def, p) => {
+      // Fiche remplie et reliée : elle est reprise par le nouveau modèle, rien n'est perdu.
+      if ((qf.state?.linked && qf.state.touched) || confirmDiscard()) loadTemplate(def.id, p).catch(fail);
+    },
+    onBlank: () => {
+      if (confirmDiscard()) loadDoc({ background: '#ffffff', objects: [] }).then(() => bottomBar.openColumns()).catch(fail);
+    },
+  });
 }
 
 async function openProject(file: File) {
   if (!confirmDiscard()) return;
   const { project, dropped } = await readProject(file);
-  await loadDoc(project.canvas, project.meta);
+  // Projet avec fiche : le remplissage rapide reprend là où il en était.
+  await loadDoc(project.canvas, project.meta, project.fill ?? null);
   if (project.layout) ed.setAids({ columns: project.layout });
   toast(dropped ? `Projet ouvert (${dropped} élément(s) non pris en charge ignoré(s)).` : 'Projet ouvert.');
 }
 
 function saveProject() {
-  const blob = serializeProject(ed.toJSON(), ed.meta, ed.columns);
+  const blob = serializeProject(ed.toJSON(), ed.meta, ed.columns, qf.state);
   download(blob, `${slug(ed.meta.title, 'projet')}.json`);
   ed.dirty = false;
   toast('Projet enregistré dans vos téléchargements.');
@@ -289,17 +334,7 @@ $('btn-export').addEventListener('click', () => void exportPdf());
 $('btn-new').addEventListener('click', () => {
   if (confirmDiscard()) loadDoc({ background: '#ffffff', objects: [] }).catch(fail);
 });
-$('btn-template').addEventListener('click', () =>
-  openGallery({
-    palette,
-    onChoose: (def, p) => {
-      if (confirmDiscard()) loadTemplate(def.id, p).catch(fail);
-    },
-    onBlank: () => {
-      if (confirmDiscard()) loadDoc({ background: '#ffffff', objects: [] }).then(() => bottomBar.openColumns()).catch(fail);
-    },
-  }),
-);
+$('btn-template').addEventListener('click', chooseTemplate);
 $('btn-ai').addEventListener('click', () => {
   import('./ui/ai-check').then((m) => m.openAiCheck(ed)).catch(fail);
 });

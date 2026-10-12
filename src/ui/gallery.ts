@@ -2,19 +2,34 @@ import { StaticCanvas } from 'fabric';
 import type { CanvasJSON } from '../editor';
 import { PAGE } from '../editor';
 import { KINDS, PALETTES, SOURCES, TEMPLATES, TIPS, type Palette, type TemplateDef, type TemplateKind } from '../templates';
+import type { Persona } from '../templates/content';
 import { h, modal } from './dom';
 
 const thumbs = new Map<string, Promise<string>>();
 /** Filtre conservé d'une ouverture à l'autre (le temps de la session). */
 let kind: TemplateKind | 'all' = 'all';
 
-/** Miniature JPEG d'un modèle (mise en cache par modèle et palette). */
-function thumbnail(def: TemplateDef, p: Palette): Promise<string> {
-  const key = `${def.id}|${p.id}`;
+/** Fiche remplie par l'utilisateur : les miniatures la montrent (sinon, données d'exemple). */
+export interface GalleryData {
+  persona: Persona;
+  /** Change dès que la fiche change (clé de cache des miniatures). */
+  key: string;
+}
+
+/** Miniature JPEG d'un modèle (mise en cache par modèle, palette et fiche). */
+let dataKey = '';
+
+function thumbnail(def: TemplateDef, p: Palette, data?: GalleryData): Promise<string> {
+  // Fiche modifiée : les miniatures de l'ancienne version ne serviront plus (celles des exemples restent).
+  if (data && data.key !== dataKey) {
+    for (const k of thumbs.keys()) if (!k.endsWith('|')) thumbs.delete(k);
+    dataKey = data.key;
+  }
+  const key = `${def.id}|${p.id}|${data?.key ?? ''}`;
   let t = thumbs.get(key);
   if (!t) {
     t = (async () => {
-      const json: CanvasJSON = await def.build(p);
+      const json: CanvasJSON = await def.build(p, data?.persona ?? def.sample);
       const sc = new StaticCanvas(document.createElement('canvas'), {
         width: PAGE.w,
         height: PAGE.h,
@@ -34,6 +49,7 @@ function thumbnail(def: TemplateDef, p: Palette): Promise<string> {
 
 export function openGallery(opts: {
   palette: Palette;
+  data?: GalleryData;
   onChoose(def: TemplateDef, palette: Palette): void;
   onBlank(): void;
 }) {
@@ -106,7 +122,7 @@ export function openGallery(opts: {
     // Génération séquentielle : l'interface reste fluide.
     for (const [def, img] of cards) {
       img.classList.add('loading');
-      const url = await thumbnail(def, palette);
+      const url = await thumbnail(def, palette, opts.data);
       if (id !== gen) return;
       img.src = url;
       img.classList.remove('loading');

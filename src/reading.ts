@@ -115,7 +115,14 @@ export function readingOrder(items: Item[]): Item[] {
     const zone = items.filter((b) => mid(b) >= ya && mid(b) <= yb);
     const leftCol = zone.filter((b) => (b.x0 + b.x1) / 2 < gutter.x);
     const rightCol = zone.filter((b) => (b.x0 + b.x1) / 2 >= gutter.x);
-    const parts = [above, leftCol, rightCol, below];
+    // En-tête d'une colonne : ce qui finit avant le premier contenu de l'autre colonne
+    // (ex. le nom en haut à droite, au-dessus d'une colonne gauche qui commence plus bas) est lu en premier.
+    // Seul le texte compte : une photo en haut d'une colonne n'empêche pas de lire le nom d'abord.
+    const textTop = (col: Item[]) => Math.min(...col.filter((b) => isText(b.obj)).map((b) => b.y0));
+    const headL = leftCol.filter((b) => isText(b.obj) && b.y1 <= textTop(rightCol));
+    const headR = rightCol.filter((b) => isText(b.obj) && b.y1 <= textTop(leftCol));
+    const rest = (col: Item[], head: Item[]) => col.filter((b) => !head.includes(b));
+    const parts = [above, headL, headR, rest(leftCol, headL), rest(rightCol, headR), below];
     if (parts.every((p) => p.length < items.length)) return parts.flatMap(readingOrder);
   }
 

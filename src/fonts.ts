@@ -6,11 +6,17 @@ import montserratRegular from './fonts/Montserrat-Regular.ttf?url';
 import montserratBold from './fonts/Montserrat-Bold.ttf?url';
 import arimaRegular from './fonts/Arima-Regular.ttf?url';
 import arimaBold from './fonts/Arima-Bold.ttf?url';
+import dmSerifRegular from './fonts/DMSerifDisplay-Regular.ttf?url';
+import poppinsRegular from './fonts/Poppins-Regular.ttf?url';
+import poppinsSemiBold from './fonts/Poppins-SemiBold.ttf?url';
 
 export const FONTS = {
   Lato: { 400: latoRegular, 700: latoBold },
   Montserrat: { 400: montserratRegular, 700: montserratBold },
   Arima: { 400: arimaRegular, 700: arimaBold },
+  // Police d'affichage à graisse unique : le « gras » utilise le même fichier (jamais de faux gras).
+  'DM Serif Display': { 400: dmSerifRegular, 700: dmSerifRegular },
+  Poppins: { 400: poppinsRegular, 700: poppinsSemiBold },
 } as const;
 
 export type FontFamily = keyof typeof FONTS;

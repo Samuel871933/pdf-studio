@@ -1,26 +1,71 @@
-// Contenu fictif des modèles (aucune donnée réelle). Les puces suivent les bonnes pratiques :
-// verbe d'action + résultat chiffré, expérience la plus récente en premier.
-import type { Entry } from './kit';
+// Données des modèles : une fiche unique (Persona) que chaque modèle met en page.
+// Le remplissage rapide édite cette fiche ; les exemples ci-dessous sont fictifs (aucune donnée réelle).
+// Les puces suivent les bonnes pratiques : verbe d'action + résultat chiffré, expérience la plus récente en premier.
+
+/** Poste ou diplôme. */
+export interface Entry {
+  title: string;
+  org: string;
+  dates: string;
+  text?: string;
+  bullets?: string[];
+}
+
+/** Compétence ; `level` de 1 à 5 (jauges des modèles graphiques). */
+export interface Skill {
+  name: string;
+  level: number;
+}
+
+/** Langue : niveau court (« C1 », « Natif »), précision facultative, et note de 1 à 5 (points). */
+export interface Language {
+  name: string;
+  level: string;
+  detail?: string;
+  score: number;
+}
+
+export interface LetterData {
+  /** Bloc destinataire (une ligne par retour à la ligne). */
+  recipient: string;
+  /** Objet, sans le préfixe « Objet : ». */
+  subject: string;
+  greeting: string;
+  paragraphs: string[];
+  closing: string;
+}
 
 export interface Persona {
   name: string;
   title: string;
+  /** Photo (data URL assainie) ; absente : silhouette par défaut. */
+  photo?: string;
   phone: string;
   email: string;
   city: string;
+  /** Adresse postale (lettres), une ligne par retour à la ligne. */
+  address: string;
   linkedin: string;
-  github?: string;
+  github: string;
   profile: string;
   experience: Entry[];
   education: Entry[];
-  skills: string[];
-  skillLevels: [string, number][];
-  tools: string[];
-  languages: [string, number][];
-  languagesText: string;
-  interests: string[];
   achievements: string[];
+  skills: Skill[];
+  tools: string[];
+  languages: Language[];
+  interests: string[];
+  letter: LetterData;
 }
+
+/** Éléments renseignés d'une liste (un élément tout juste ajouté, encore vide, n'est pas affiché). */
+export const filled = (list: string[]) => list.filter((s) => s.trim());
+
+export const languagesText = (p: Persona) =>
+  p.languages.filter((l) => l.name.trim()).map((l) => `${l.name} : ${l.level}${l.detail ? ` (${l.detail})` : ''}`).join('  ·  ');
+
+/** Ville sans le département entre parenthèses (« Bordeaux (33) » → « Bordeaux »). */
+export const cityName = (city: string) => city.replace(/\s*\(.*\)\s*$/, '');
 
 export const GENERALIST: Persona = {
   name: 'Camille Martin',
@@ -28,7 +73,9 @@ export const GENERALIST: Persona = {
   phone: '06 12 34 56 78',
   email: 'camille.martin@email.fr',
   city: 'Bordeaux (33)',
+  address: '12 rue de l’Exemple\n33000 Bordeaux',
   linkedin: 'linkedin.com/in/camille-martin',
+  github: '',
   profile:
     '8 ans d’expérience dans le pilotage de projets web et e-commerce, du cadrage à la mise en production. ' +
     'Coordination d’équipes pluridisciplinaires, suivi budgétaire et amélioration continue orientée résultats.',
@@ -63,31 +110,36 @@ export const GENERALIST: Persona = {
     { title: 'Master Management de projets numériques', org: 'Université de Ville', dates: '2016' },
     { title: 'Licence Information-Communication', org: 'Université de Ville', dates: '2014' },
   ],
-  skills: [
-    'Gestion de projet (Agile, Scrum, Kanban)',
-    'Pilotage budgétaire et reporting',
-    'UX et optimisation des parcours',
-    'SEO, SEA et analyse d’audience',
-    'Rédaction de cahiers des charges',
-  ],
-  skillLevels: [
-    ['Gestion de projet — expert', 0.95],
-    ['Pilotage budgétaire — avancé', 0.8],
-    ['UX / parcours client — avancé', 0.75],
-    ['SEO / Analytics — confirmé', 0.7],
-  ],
-  tools: ['Jira', 'Notion', 'Figma', 'Google Analytics', 'Excel', 'WordPress', 'PrestaShop'],
-  languages: [
-    ['Anglais — C1', 4],
-    ['Espagnol — B1', 3],
-  ],
-  languagesText: 'Anglais : C1 (professionnel)  ·  Espagnol : B1',
-  interests: ['Course à pied (semi-marathon)', 'Photographie', 'Bénévolat associatif'],
   achievements: [
     'Boutique en ligne lancée en 4 mois : 1,2 M€ de CA la première année',
     'Réduction de 25 % des coûts de maintenance grâce à la mutualisation des outils',
     'Formation de 30 collaborateurs aux méthodes agiles',
   ],
+  skills: [
+    { name: 'Gestion de projet (Agile, Scrum, Kanban)', level: 5 },
+    { name: 'Pilotage budgétaire et reporting', level: 4 },
+    { name: 'UX et optimisation des parcours', level: 4 },
+    { name: 'SEO, SEA et analyse d’audience', level: 3 },
+    { name: 'Rédaction de cahiers des charges', level: 4 },
+  ],
+  tools: ['Jira', 'Notion', 'Figma', 'Google Analytics', 'Excel', 'WordPress', 'PrestaShop'],
+  languages: [
+    { name: 'Anglais', level: 'C1', detail: 'professionnel', score: 4 },
+    { name: 'Espagnol', level: 'B1', score: 3 },
+  ],
+  interests: ['Course à pied (semi-marathon)', 'Photographie', 'Bénévolat associatif'],
+  letter: {
+    recipient: 'Société Exemple\nService Recrutement\n12 rue de l’Exemple\n33000 Bordeaux',
+    subject: 'candidature au poste de Responsable de projet digital',
+    greeting: 'Madame, Monsieur,',
+    paragraphs: [
+      'Votre entreprise accélère sa transformation numérique et recherche une personne capable de piloter des projets web à fort enjeu. Cette ambition rejoint pleinement mon parcours et mes motivations.',
+      'Depuis huit ans, je conduis des projets digitaux de bout en bout. Chez Société Exemple, j’ai piloté quinze projets par an et augmenté de 32 % le taux de conversion de la boutique en ligne grâce à la refonte du parcours d’achat. J’ai également encadré une équipe de six personnes et introduit les méthodes agiles.',
+      'Votre projet de refonte de la plateforme client m’intéresse tout particulièrement : il demande à la fois rigueur dans le pilotage, écoute des équipes métier et sens du résultat, trois qualités que je mets en œuvre au quotidien.',
+      'Rejoindre vos équipes me permettrait de mettre cette expérience au service de vos projets, tout en relevant de nouveaux défis. Je serais ravi(e) de vous présenter plus en détail mes réalisations lors d’un entretien.',
+    ],
+    closing: 'Je vous prie d’agréer, Madame, Monsieur, l’expression de mes salutations distinguées.',
+  },
 };
 
 export const DEVELOPER: Persona = {
@@ -96,6 +148,7 @@ export const DEVELOPER: Persona = {
   phone: '06 98 76 54 32',
   email: 'alex.durand@email.fr',
   city: 'Lyon (69)',
+  address: '8 avenue de l’Exemple\n69000 Lyon',
   linkedin: 'linkedin.com/in/alex-durand',
   github: 'github.com/alex-durand',
   profile:
@@ -126,19 +179,36 @@ export const DEVELOPER: Persona = {
     { title: 'Licence pro Développement web', org: 'IUT de Ville', dates: '2019' },
     { title: 'Titre Concepteur développeur d’applications', org: 'Organisme de formation', dates: '2018' },
   ],
-  skills: ['Architecture d’API REST', 'Tests automatisés', 'Performance et sécurité web', 'Revue de code et mentorat'],
-  skillLevels: [],
-  tools: ['PHP', 'Symfony', 'JavaScript', 'TypeScript', 'React', 'Next.js', 'Node.js', 'MySQL', 'PostgreSQL', 'Docker', 'Git', 'CI/CD'],
-  languages: [
-    ['Anglais — B2', 4],
-    ['Allemand — A2', 2],
-  ],
-  languagesText: 'Anglais : B2 (documentation technique)  ·  Allemand : A2',
-  interests: ['Projets open source', 'Escalade', 'Jeux de société'],
   achievements: [
     'Gestion de stock (React, Node.js) : 2 000 utilisateurs',
     'Module e-commerce open source (PHP) : 300 étoiles sur GitHub',
   ],
+  skills: [
+    { name: 'Architecture d’API REST', level: 5 },
+    { name: 'Tests automatisés', level: 4 },
+    { name: 'Performance et sécurité web', level: 4 },
+    { name: 'Revue de code et mentorat', level: 3 },
+  ],
+  tools: ['PHP', 'Symfony', 'JavaScript', 'TypeScript', 'React', 'Next.js', 'Node.js', 'MySQL', 'PostgreSQL', 'Docker', 'Git', 'CI/CD'],
+  languages: [
+    { name: 'Anglais', level: 'B2', detail: 'documentation technique', score: 4 },
+    { name: 'Allemand', level: 'A2', score: 2 },
+  ],
+  interests: ['Projets open source', 'Escalade', 'Jeux de société'],
+  letter: {
+    recipient: 'Société Exemple\nService Recrutement\n8 avenue de l’Exemple\n69000 Lyon',
+    subject: 'Candidature au poste de Développeur web',
+    greeting: 'Madame, Monsieur,',
+    paragraphs: [
+      'Actuellement développeur web au sein d’une agence depuis plusieurs années, je souhaite aujourd’hui m’ouvrir à de nouvelles opportunités professionnelles. C’est dans cette optique que je me permets de vous adresser ma candidature afin de mettre l’expérience acquise au service de votre entreprise.',
+      'Titulaire d’un diplôme de concepteur développeur d’applications, j’ai poursuivi mon parcours par une licence professionnelle en alternance. Ces formations, associées à mon expérience en agence, m’ont permis d’acquérir de solides bases techniques et de travailler sur des projets variés.',
+      'J’ai notamment conçu et réalisé des boutiques en ligne de bout en bout, avec ou sans intégrations tierces (ERP, solutions de paiement, transporteurs, places de marché), et développé de nombreux modules sur mesure, côté front-office comme back-office.',
+      'En parallèle, j’ai assuré la maintenance évolutive et corrective de plusieurs dizaines de sites : montées de version, interventions en production, optimisation des performances et résolution d’incidents. Ces missions m’ont appris à communiquer avec les clients, à travailler en équipe et à maîtriser l’ensemble du cycle de vie d’un projet web.',
+      'Motivé et désireux de poursuivre mon évolution au sein d’une structure dans laquelle je pourrai m’investir durablement, je suis convaincu que votre entreprise constituerait le cadre idéal pour mettre à profit mes compétences tout en continuant d’apprendre.',
+      'Je reste à votre entière disposition pour tout renseignement complémentaire et serais heureux d’échanger avec vous lors d’un entretien.',
+    ],
+    closing: 'Je vous prie d’agréer, Madame, Monsieur, l’expression de mes salutations distinguées.',
+  },
 };
 
 export const STUDENT: Persona = {
@@ -147,7 +217,9 @@ export const STUDENT: Persona = {
   phone: '07 11 22 33 44',
   email: 'sacha.lefevre@email.fr',
   city: 'Lille (59)',
+  address: '3 place de l’Exemple\n59000 Lille',
   linkedin: 'linkedin.com/in/sacha-lefevre',
+  github: '',
   profile: 'Recherche une alternance de 12 mois en marketing digital à partir de septembre 2026 (rythme 3 semaines / 1 semaine).',
   education: [
     {
@@ -179,12 +251,122 @@ export const STUDENT: Persona = {
     },
   ],
   skills: [],
-  skillLevels: [],
   tools: ['Canva', 'Meta Business', 'Google Analytics', 'WordPress', 'Excel', 'Notion', 'Mailchimp'],
   languages: [
-    ['Anglais — B2', 4],
-    ['Espagnol — B1', 3],
+    { name: 'Anglais', level: 'B2', detail: 'TOEIC 850', score: 4 },
+    { name: 'Espagnol', level: 'B1', score: 3 },
   ],
-  languagesText: 'Anglais : B2 (TOEIC 850)  ·  Espagnol : B1',
   interests: ['Photographie', 'Handball en club', 'Voyages'],
+  letter: { ...GENERALIST.letter },
 };
+
+/** Modèle « Organique » : profil fictif (métiers de l'accueil et du vin). */
+export const HOSPITALITY: Persona = {
+  name: 'Léa Moreau',
+  title: 'Chargée de marketing & communication, créatrice de contenus en alternance',
+  phone: '06 45 67 89 10',
+  email: 'lea.moreau@email.fr',
+  city: 'Bordeaux (33)',
+  address: '10 rue de l’Exemple\n33000 Bordeaux',
+  linkedin: 'linkedin.com/in/lea-moreau',
+  github: '',
+  profile: 'Passionnée par l’univers du vin et du luxe, je conjugue accueil, conseil et communication digitale pour faire vivre l’expérience client.',
+  experience: [
+    { title: 'Assistante communication digitale — Mission ponctuelle', org: 'Maison Exemple, Bordeaux', dates: 'Depuis mars 2026' },
+    { title: 'Guide œnotourisme — Contrat d’alternance', org: 'Château Exemple, Sauternes', dates: 'Oct. 2025 – sept. 2026' },
+    { title: 'Chargée d’œnotourisme (CDI)', org: 'Domaine Modèle, Pessac', dates: 'Janv. 2023 – oct. 2024' },
+    { title: 'Sommelière (CDI)', org: 'Restaurant Démo, Bordeaux', dates: 'Janv. 2022 – déc. 2022' },
+    { title: 'Sommelière caviste — Contrat d’alternance', org: 'Cave Exemple, Bordeaux', dates: 'Juil. 2020 – sept. 2021' },
+  ],
+  education: [
+    { title: 'Mastère Marketing & management du luxe', org: 'École de Ville, Bordeaux', dates: '2025 – 2027' },
+    { title: 'Formation de conseiller en sommellerie', org: 'Organisme de formation, Bordeaux', dates: '2020 – 2021' },
+    { title: 'Licence professionnelle Œnotourisme', org: 'Université de Ville', dates: '2019 – 2020' },
+    { title: 'BTS Tourisme', org: 'Lycée de Ville', dates: '2015 – 2017' },
+  ],
+  achievements: [],
+  skills: [
+    { name: 'Informatique (Canva, Pack Office, CapCut)', level: 4 },
+    { name: 'Autonome et rigoureuse', level: 4 },
+    { name: 'Proactive et entreprenante', level: 4 },
+    { name: 'Capacité d’adaptation', level: 4 },
+    { name: 'Maîtrise de la relation client', level: 5 },
+    { name: 'Esprit d’équipe', level: 4 },
+  ],
+  tools: ['Canva', 'Pack Office', 'CapCut'],
+  languages: [
+    { name: 'Anglais', level: 'C1', score: 4 },
+    { name: 'Espagnol', level: 'B2', score: 3 },
+  ],
+  interests: ['Mode', 'Danse', 'Théâtre', 'Voyage'],
+  letter: { ...GENERALIST.letter },
+};
+
+/** Lettre classique : coordonnées génériques à remplacer. */
+export const LETTER_SAMPLE: Persona = {
+  ...DEVELOPER,
+  name: 'Prénom NOM',
+  phone: '06 12 34 56 78',
+  email: 'prenom.nom@email.fr',
+  city: 'Ville',
+  address: '12 rue de l’Exemple\n33000 Ville',
+};
+
+export const clonePersona = (p: Persona): Persona => structuredClone(p);
+
+// ------------------------------------------------------------------ Validation (projets ouverts)
+
+const IMAGE_SRC = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+=*$/;
+type Obj = Record<string, unknown>;
+const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
+const str = (v: unknown, max = 2000) => (typeof v === 'string' ? v.slice(0, max) : '');
+const list = <T>(v: unknown, max: number, f: (x: unknown) => T | null): T[] =>
+  Array.isArray(v) ? v.slice(0, max).map(f).filter((x): x is T => x !== null) : [];
+const level = (v: unknown, d = 3) => {
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) ? Math.min(5, Math.max(1, n)) : d;
+};
+
+function entry(v: unknown): Entry | null {
+  if (!isObj(v)) return null;
+  const e: Entry = { title: str(v.title, 300), org: str(v.org, 300), dates: str(v.dates, 120) };
+  if (v.text) e.text = str(v.text);
+  const bullets = list(v.bullets, 30, (b) => (typeof b === 'string' ? b.slice(0, 500) : null));
+  if (bullets.length) e.bullets = bullets;
+  return e;
+}
+
+/** Fiche issue d'un fichier ouvert : seuls les champs attendus, en texte, de taille bornée. */
+export function sanitizePersona(v: unknown): Persona | null {
+  if (!isObj(v)) return null;
+  const text = (x: unknown) => (typeof x === 'string' ? x.slice(0, 500) : null);
+  const letter = isObj(v.letter) ? v.letter : {};
+  return {
+    name: str(v.name, 200),
+    title: str(v.title, 300),
+    photo: typeof v.photo === 'string' && IMAGE_SRC.test(v.photo) ? v.photo : undefined,
+    phone: str(v.phone, 60),
+    email: str(v.email, 200),
+    city: str(v.city, 200),
+    address: str(v.address, 500),
+    linkedin: str(v.linkedin, 300),
+    github: str(v.github, 300),
+    profile: str(v.profile, 3000),
+    experience: list(v.experience, 30, entry),
+    education: list(v.education, 30, entry),
+    achievements: list(v.achievements, 40, text),
+    skills: list(v.skills, 40, (s) => (isObj(s) ? { name: str(s.name, 300), level: level(s.level) } : null)),
+    tools: list(v.tools, 60, text),
+    languages: list(v.languages, 20, (l) =>
+      isObj(l) ? { name: str(l.name, 100), level: str(l.level, 60), detail: str(l.detail, 200) || undefined, score: level(l.score) } : null,
+    ),
+    interests: list(v.interests, 30, text),
+    letter: {
+      recipient: str(letter.recipient, 1000),
+      subject: str(letter.subject, 500),
+      greeting: str(letter.greeting, 300),
+      paragraphs: list(letter.paragraphs, 20, (x) => (typeof x === 'string' ? x.slice(0, 5000) : null)),
+      closing: str(letter.closing, 1000),
+    },
+  };
+}

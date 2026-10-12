@@ -396,9 +396,13 @@ class Writer {
       }
       return this.pdf.image(key, { width: w, height: h, rgb: rgbData, alpha });
     }
-    const blob = await new Promise<Blob | null>((res) => cv.toBlob(res, 'image/jpeg', JPEG_QUALITY));
-    if (!blob) return null;
-    return this.pdf.image(key, { width: w, height: h, jpeg: new Uint8Array(await blob.arrayBuffer()) });
+    // Encodage synchrone : toBlob / convertToBlob sont reportés par le navigateur au prochain
+    // moment d'inactivité, soit jusqu'à ~1 s d'attente juste après un clic.
+    const url = cv.toDataURL('image/jpeg', JPEG_QUALITY);
+    const bin = atob(url.slice(url.indexOf(',') + 1));
+    const jpeg = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) jpeg[i] = bin.charCodeAt(i);
+    return this.pdf.image(key, { width: w, height: h, jpeg });
   }
 }
 

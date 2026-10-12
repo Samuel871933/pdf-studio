@@ -29,16 +29,17 @@ function layerName(o: FabricObject): string {
     return t ? (t.length > 34 ? `${t.slice(0, 33)}…` : t) : 'Texte vide';
   }
   if (o instanceof FabricImage && o.clipPath) return o.clipPath instanceof Circle ? 'Photo (ronde)' : 'Image (forme)';
+  // Grand tracé libre (fond d'un modèle) : une forme, pas une icône.
+  if (o instanceof Path && Math.max(o.getScaledWidth(), o.getScaledHeight()) > 120) return 'Forme';
   if (o instanceof Polygon && !(o instanceof Triangle)) return o.points.length === 10 ? 'Étoile' : o.points.length === 5 ? 'Bannière' : 'Forme';
   return label(o);
 }
 
-export function setupLayers(ed: Editor, root: HTMLElement, toggleBtn: HTMLButtonElement) {
+/** `pane` : onglet des calques ; `count` : compteur affiché dans l'onglet ; `shown` : l'onglet est visible. */
+export function setupLayers(ed: Editor, pane: HTMLElement, count: HTMLElement, shown: () => boolean) {
   const c = ed.canvas;
   const list = h('ul', { class: 'layer-list', role: 'tree', ariaLabel: 'Calques', ariaMultiSelectable: 'true' });
-  const count = h('span', { class: 'layer-count' });
-  const close = h('button', { type: 'button', class: 'icon', title: 'Replier les calques', ariaLabel: 'Replier les calques' }, uiIcon('chevron', 16));
-  root.append(h('div', { class: 'layers-head' }, uiIcon('layers', 16), h('strong', {}, 'Calques'), count, close), list);
+  pane.append(list);
 
   /** Bloc en cours de glisser : un élément seul, ou tous les membres d'un groupe. */
   let dragged: { block: FabricObject[]; group?: string } | null = null;
@@ -47,16 +48,6 @@ export function setupLayers(ed: Editor, root: HTMLElement, toggleBtn: HTMLButton
   const isOpen = (id: string) => expanded.has(id);
   let renaming = false;
   let frame = 0;
-
-  const setOpen = (open: boolean) => {
-    root.hidden = !open;
-    toggleBtn.ariaPressed = String(open);
-    if (open) render();
-  };
-  toggleBtn.addEventListener('click', () => setOpen(!!root.hidden));
-  close.addEventListener('click', () => setOpen(false));
-  // Ouvert par défaut, sauf sur petit écran (il recouvrirait la page).
-  setOpen(!matchMedia('(max-width: 860px)').matches);
 
   /** Clic sur une ligne : sélection simple, ou ajout / retrait avec Maj / Ctrl. */
   function pick(objs: FabricObject[], add: boolean, direct: boolean) {
@@ -237,9 +228,9 @@ export function setupLayers(ed: Editor, root: HTMLElement, toggleBtn: HTMLButton
 
   function render() {
     cancelAnimationFrame(frame);
-    if (root.hidden || dragged || renaming) return;
     const objs = c.getObjects();
     count.textContent = String(objs.length);
+    if (!shown() || dragged || renaming) return;
     // Un élément sélectionné seul dans un groupe : on déplie ce groupe pour le montrer.
     if (!ed.selectedGroup()) for (const o of c.getActiveObjects()) if (o.groupId) expanded.add(o.groupId);
     const rows: HTMLLIElement[] = [];

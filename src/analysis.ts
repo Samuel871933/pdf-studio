@@ -78,8 +78,8 @@ const INJECTION = [
 ];
 
 const SECTIONS: [string, RegExp][] = [
-  ['Expérience', /\b(experience|parcours professionnel|emplois?|postes? occupes|stages?)\b/],
-  ['Formation', /\b(formation|diplomes?|etudes|education|cursus)\b/],
+  ['Expérience', /\b(experiences?|parcours professionnel|emplois?|postes? occupes|stages?)\b/],
+  ['Formation', /\b(formations?|diplomes?|etudes|education|cursus)\b/],
   ['Compétences', /\b(competences|savoir-faire|skills|stack|outils)\b/],
 ];
 

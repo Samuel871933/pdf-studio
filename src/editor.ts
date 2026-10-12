@@ -8,11 +8,19 @@ declare module 'fabric' {
     /** Groupe logique (les éléments restent séparés dans le PDF : ordre de lecture et balisage intacts). */
     groupId?: string;
     groupName?: string;
+    /** Élément généré par un modèle (remplacé quand le remplissage rapide régénère la page). */
+    tpl?: boolean;
+    /** Champ de la fiche affiché par ce texte (« experience.0.title ») et sa mise en forme. */
+    field?: string;
+    codec?: string;
   }
   interface SerializedObjectProps {
     locked?: boolean;
     groupId?: string;
     groupName?: string;
+    tpl?: boolean;
+    field?: string;
+    codec?: string;
   }
 }
 
@@ -27,7 +35,12 @@ export interface DocMeta {
   keywords: string;
   /** Type de document (fixé par le modèle choisi), utilisé par l'analyse IA. */
   kind?: 'cv' | 'letter';
+  /** Propriétés modifiées à la main : le remplissage rapide ne les remplace plus. */
+  manual?: Partial<Record<MetaKey, true>>;
 }
+
+export type MetaKey = 'title' | 'author' | 'subject' | 'keywords';
+export const META_KEYS: MetaKey[] = ['title', 'author', 'subject', 'keywords'];
 
 export const emptyMeta = (title = '', kind?: DocMeta['kind']): DocMeta => ({ title, author: '', subject: '', keywords: '', kind });
 
@@ -37,7 +50,7 @@ export interface CanvasJSON {
   objects: Record<string, unknown>[];
 }
 
-FabricObject.customProperties = ['locked', 'groupId', 'groupName'];
+FabricObject.customProperties = ['locked', 'groupId', 'groupName', 'tpl', 'field', 'codec'];
 Object.assign(FabricObject.ownDefaults, {
   originX: 'left',
   originY: 'top',
@@ -81,6 +94,10 @@ export class Editor {
   zoom = 1;
   meta: DocMeta = emptyMeta();
   dirty = false;
+  /** État du remplissage rapide (fiche + modèle), enregistré dans l'historique avec la page. */
+  fill: unknown = null;
+  /** Appelé après annuler / rétablir (l'état du remplissage a pu changer). */
+  onRestore: () => void = () => {};
   /** Aides visuelles (jamais exportées). */
   snapEnabled = true;
   showGrid = false;
@@ -870,17 +887,23 @@ export class Editor {
   private snapshot(): string {
     const json = this.toJSON();
     for (const o of json.objects) {
-      if (typeof o.src === 'string' && o.src.startsWith('data:')) {
-        let key = this.imageKeys.get(o.src);
-        if (!key) {
-          key = `img:${this.imageKeys.size}:${Date.now().toString(36)}`;
-          this.imageKeys.set(o.src, key);
-          this.imageData.set(key, o.src);
-        }
-        o.src = key;
-      }
+      if (typeof o.src === 'string' && o.src.startsWith('data:')) o.src = this.imageKey(o.src);
     }
-    return JSON.stringify(json);
+    // La fiche suit la page dans l'historique ; sa photo est stockée une seule fois (clé).
+    const fill = this.fill ? structuredClone(this.fill) as { data?: { photo?: string } } : null;
+    const photo = fill?.data?.photo;
+    if (photo?.startsWith('data:')) fill!.data!.photo = this.imageKey(photo);
+    return JSON.stringify({ ...json, fill });
+  }
+
+  private imageKey(src: string): string {
+    let key = this.imageKeys.get(src);
+    if (!key) {
+      key = `img:${this.imageKeys.size}:${Date.now().toString(36)}`;
+      this.imageKeys.set(src, key);
+      this.imageData.set(key, src);
+    }
+    return key;
   }
 
   /** Libère les images qui ne sont plus référencées par aucun instantané. */
@@ -913,13 +936,17 @@ export class Editor {
   }
 
   private async restore(snap: string) {
-    const json = JSON.parse(snap) as CanvasJSON;
+    const { fill, ...json } = JSON.parse(snap) as CanvasJSON & { fill?: { data?: { photo?: string } } | null };
     for (const o of json.objects) {
       if (typeof o.src === 'string' && o.src.startsWith('img:')) o.src = this.imageData.get(o.src) ?? '';
     }
+    const photo = fill?.data?.photo;
+    if (photo?.startsWith('img:')) fill!.data!.photo = this.imageData.get(photo);
+    this.fill = fill ?? null;
     await this.load(json, false);
     this.dirty = true;
     this.onStateChange();
+    this.onRestore();
   }
 
   // ---------------------------------------------------------------- Chargement / sérialisation

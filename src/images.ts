@@ -41,7 +41,7 @@ export async function sanitizeImage(file: File): Promise<CleanImage> {
   }
 }
 
-export function hasTransparency(ctx: CanvasRenderingContext2D, w: number, h: number): boolean {
+export function hasTransparency(ctx: Pick<CanvasRenderingContext2D, 'getImageData'>, w: number, h: number): boolean {
   const data = ctx.getImageData(0, 0, w, h).data;
   for (let i = 3; i < data.length; i += 4) if (data[i] < 255) return true;
   return false;
