@@ -1,0 +1,6 @@
+node_modules
+dist
+*.pdf
+.DS_Store
+src/icons/curated.json
+public/icons/
