@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="Éditeur de PDF dans le navigateur : formes, textes, couleurs, images. 100 % local, rien n'est envoyé ni stocké." />
+    <title>PDF Studio</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h8l6 6v14H6z" fill="currentColor" opacity=".2"/><path d="M6 2h8l6 6v14H6zM14 2v6h6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        <span>PDF Studio</span>
+      </div>
+      <span class="privacy" title="Aucune donnée ne quitte votre navigateur : pas de serveur, pas de cookie, pas de stockage.">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 11V8a5 5 0 0 1 10 0v3M5 11h14v10H5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+        100 % local
+      </span>
+      <div class="group">
+        <button id="btn-new" title="Page vierge">Nouveau</button>
+        <button id="btn-template" title="Choisir un modèle de CV ou de lettre">Modèles</button>
+        <button id="btn-open" title="Ouvrir un projet .json">Ouvrir</button>
+        <button id="btn-save" title="Enregistrer le projet en .json (Ctrl+S)">Enregistrer</button>
+      </div>
+      <div class="group">
+        <button id="btn-undo" class="icon" title="Annuler (Ctrl+Z)" aria-label="Annuler"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <button id="btn-redo" class="icon" title="Rétablir (Ctrl+Y)" aria-label="Rétablir"><svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5M20 9H10a6 6 0 0 0 0 12h3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      </div>
+      <button id="btn-ai" title="Vérifier comment une IA ou un logiciel de recrutement lira le document"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v3M8 5h8a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3zM9 11h.01M15 11h.01M9.5 15h5M2 11v3M22 11v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>Analyse IA</button>
+      <button id="btn-export" class="primary" title="Télécharger le PDF (Ctrl+E)">Exporter PDF</button>
+      <input type="file" id="file-project" accept=".json,application/json" hidden />
+      <input type="file" id="file-image" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
+    </header>
+
+    <main class="layout">
+      <nav class="tools" aria-label="Ajouter un élément">
+        <button data-add="heading" title="Titre"><svg viewBox="0 0 24 24"><path d="M5 5h14M12 5v14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg><span>Titre</span></button>
+        <button data-add="text" title="Texte"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 11h16M4 16h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>Texte</span></button>
+        <button data-add="list" title="Liste à puces"><svg viewBox="0 0 24 24"><circle cx="5" cy="7" r="1.6" fill="currentColor"/><circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="5" cy="17" r="1.6" fill="currentColor"/><path d="M10 7h10M10 12h10M10 17h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>Liste</span></button>
+        <button data-add="image" title="Image"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="9" cy="10" r="2" fill="currentColor"/><path d="m4 19 6-6 4 4 3-3 4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg><span>Image</span></button>
+        <hr />
+        <button data-add="rect" title="Rectangle"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="1" fill="currentColor"/></svg><span>Rectangle</span></button>
+        <button data-add="circle" title="Cercle"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="currentColor"/></svg><span>Cercle</span></button>
+        <button data-add="triangle" title="Triangle"><svg viewBox="0 0 24 24"><path d="M12 4 21 20H3z" fill="currentColor"/></svg><span>Triangle</span></button>
+        <button data-add="banner" title="Bannière (chevron)"><svg viewBox="0 0 24 24"><path d="M6 3h12v14l-6 4-6-4z" fill="currentColor"/></svg><span>Bannière</span></button>
+        <button data-add="star" title="Étoile"><svg viewBox="0 0 24 24"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z" fill="currentColor"/></svg><span>Étoile</span></button>
+        <button data-add="line" title="Ligne"><svg viewBox="0 0 24 24"><path d="M4 20 20 4" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg><span>Ligne</span></button>
+        <hr />
+        <button data-add="icons" title="Bibliothèque d'icônes (7 400+)"><svg viewBox="0 0 24 24"><path d="M12 2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 17l-6.1 3.4 1.5-6.8L2.2 9l6.9-.7z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg><span>Icônes</span></button>
+        <hr />
+        <button id="btn-layers" class="tog" aria-pressed="true" title="Calques : pile des éléments et plans"><svg viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5zM3 13l9 5 9-5M3 17.5l9 5 9-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg><span>Calques</span></button>
+      </nav>
+
+      <aside class="layers" id="layers" aria-label="Calques"></aside>
+
+      <section class="stage" id="stage" aria-label="Page">
+        <div class="page-wrap" id="page-wrap"><canvas id="page"></canvas></div>
+      </section>
+
+      <aside class="side">
+        <div class="panel" id="panel" aria-label="Propriétés"></div>
+        <section class="dock" id="columns-dock" aria-label="Colonnage"></section>
+      </aside>
+    </main>
+
+    <footer class="bottombar" aria-label="Barre d'actions">
+      <div class="bb-group">
+        <button id="bb-columns" class="tog" aria-pressed="false" title="Colonnes et repères de mise en page"><svg viewBox="0 0 24 24"><path d="M3 4h5v16H3zM10 4h11v16H10z" fill="none" stroke="currentColor" stroke-width="1.8"/></svg><span>Colonnes</span></button>
+        <button id="bb-grid" class="tog" aria-pressed="false" title="Afficher la grille (G)"><svg viewBox="0 0 24 24"><path d="M3 3h18v18H3zM9 3v18M15 3v18M3 9h18M3 15h18" fill="none" stroke="currentColor" stroke-width="1.6"/></svg><span>Grille</span></button>
+        <button id="bb-snap" class="tog" aria-pressed="true" title="Magnétisme (M)"><svg viewBox="0 0 24 24"><path d="M6 3v8a6 6 0 0 0 12 0V3h-4v8a2 2 0 0 1-4 0V3zM6 7h4M14 7h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg><span>Magnétisme</span></button>
+      </div>
+      <div class="bb-group bb-context" id="bb-context" hidden>
+        <button data-act="duplicate" title="Dupliquer (Ctrl+D)">Dupliquer</button>
+        <button data-act="front" title="Mettre au premier plan">Premier plan</button>
+        <button data-act="back" title="Mettre à l'arrière-plan">Arrière-plan</button>
+        <button data-act="hcenter" title="Centrer horizontalement sur la page">Centrer</button>
+        <button data-act="lock" title="Verrouiller / déverrouiller">Verrouiller</button>
+        <button data-act="delete" class="danger" title="Supprimer (Suppr)">Supprimer</button>
+      </div>
+      <span class="bb-info" id="bb-info" aria-live="polite"></span>
+      <div class="bb-group zoom">
+        <button id="zoom-out" class="icon" title="Dézoomer" aria-label="Dézoomer">−</button>
+        <button id="zoom-fit" class="zoom-label" title="Ajuster à l'écran">100 %</button>
+        <button id="zoom-in" class="icon" title="Zoomer" aria-label="Zoomer">+</button>
+      </div>
+      <button id="bb-help" class="icon" title="Raccourcis clavier (?)" aria-label="Raccourcis clavier">?</button>
+    </footer>
+
+    <div id="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
