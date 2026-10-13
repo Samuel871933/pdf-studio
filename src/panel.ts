@@ -453,7 +453,7 @@ export class Panel {
       h('p', { class: 'hint' }, 'Glissez-déposez ou collez une image directement sur la page.'),
       h('p', { class: 'hint' }, 'Raccourcis clavier : touche ', h('kbd', {}, '?'), ' ou bouton ? en bas à droite.'),
       h('h2', {}, 'Confidentialité'),
-      h('p', { class: 'hint' }, 'Tout est traité dans votre navigateur : aucun envoi, aucun cookie. Le document en cours est gardé en brouillon sur cet appareil (un seul, réglable via « 100 % local ») : pour le conserver durablement, enregistrez votre projet.'),
+      h('p', { class: 'hint' }, 'L’édition et l’export sont traités dans votre navigateur, sans backend ni cookie. L’assistant IA facultatif transmet vos demandes au fournisseur choisi. Le brouillon local est réglable via « Local hors IA » ; pour conserver durablement votre document, enregistrez le projet.'),
     ];
     queueMicrotask(() => this.refresh());
     return nodes.filter((n): n is Exclude<typeof n, false> => n !== false);

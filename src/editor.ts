@@ -20,6 +20,9 @@ declare module 'fabric' {
     heading?: HeadingLevel;
     /** Section de la fiche à laquelle appartient l'élément généré (« experience », « c:<id> » pour une section ajoutée). */
     sectionKey?: string;
+    /** Clé stable d'un élément du modèle et ses propriétés générées (retouches durables, voir retouch.ts). */
+    tplKey?: string;
+    tplBase?: Record<string, unknown>;
   }
   interface SerializedObjectProps {
     locked?: boolean;
@@ -30,6 +33,8 @@ declare module 'fabric' {
     codec?: string;
     heading?: HeadingLevel;
     sectionKey?: string;
+    tplKey?: string;
+    tplBase?: Record<string, unknown>;
   }
 }
 
@@ -61,7 +66,7 @@ export interface CanvasJSON {
   objects: Record<string, unknown>[];
 }
 
-FabricObject.customProperties = ['locked', 'groupId', 'groupName', 'tpl', 'field', 'codec', 'heading', 'sectionKey'];
+FabricObject.customProperties = ['locked', 'groupId', 'groupName', 'tpl', 'field', 'codec', 'heading', 'sectionKey', 'tplKey', 'tplBase'];
 Object.assign(FabricObject.ownDefaults, {
   originX: 'left',
   originY: 'top',
@@ -916,6 +921,28 @@ export class Editor {
     this.onStateChange();
   }
 
+  /** Capture aussi les changements en attente, puis une seule étape pour la transaction. */
+  async transaction(work: () => Promise<void>) {
+    clearTimeout(this.commitTimer);
+    this.commit();
+    const before = this.snapshot();
+    const history = [...this.history];
+    const index = this.historyIndex;
+    const dirty = this.dirty;
+    try {
+      await work();
+      clearTimeout(this.commitTimer);
+      this.commit();
+    } catch (error) {
+      await this.restore(before);
+      this.history = history;
+      this.historyIndex = index;
+      this.dirty = dirty;
+      this.onStateChange();
+      throw error;
+    }
+  }
+
   private snapshot(): string {
     const json = this.toJSON();
     for (const o of json.objects) {
@@ -925,7 +952,7 @@ export class Editor {
     const fill = this.fill ? structuredClone(this.fill) as { data?: { photo?: string } } : null;
     const photo = fill?.data?.photo;
     if (photo?.startsWith('data:')) fill!.data!.photo = this.imageKey(photo);
-    return JSON.stringify({ ...json, fill });
+    return JSON.stringify({ ...json, fill, meta: this.meta, columns: this.columns });
   }
 
   private imageKey(src: string): string {
@@ -968,7 +995,9 @@ export class Editor {
   }
 
   private async restore(snap: string) {
-    const { fill, ...json } = JSON.parse(snap) as CanvasJSON & { fill?: { data?: { photo?: string } } | null };
+    const { fill, meta, columns, ...json } = JSON.parse(snap) as CanvasJSON & { fill?: { data?: { photo?: string } } | null; meta?: DocMeta; columns?: ColumnLayout };
+    if (meta) this.meta = meta;
+    if (columns) this.columns = columns;
     for (const o of json.objects) {
       if (typeof o.src === 'string' && o.src.startsWith('img:')) o.src = this.imageData.get(o.src) ?? '';
     }

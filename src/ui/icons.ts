@@ -30,9 +30,13 @@ export const UI_ICONS = {
   line: 'M4 20 20 4',
   shape: 'M6 3h12v14l-6 4-6-4z',
   sparkle: 'M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6',
+  send: 'm3 3 18 9-18 9 4-9-4-9zM7 12h14',
+  microphone: 'M9 5a3 3 0 0 1 6 0v7a3 3 0 0 1-6 0zM6 10v2a6 6 0 0 0 12 0v-2M12 18v4M8 22h8',
+  settings: 'M4 7h16M4 17h16M9 4v6M15 14v6',
   folder: 'M3 6h6l2 2h10v11H3z',
   group: 'M3 7V3h4M17 3h4v4M21 17v4h-4M7 21H3v-4M8 8h8v8H8z',
   ungroup: 'M4 4h9v9H4zM11 11h9v9h-9z',
+  close: 'M6 6l12 12M18 6 6 18',
   grip: 'M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01',
 } as const;
 export type UiIcon = keyof typeof UI_ICONS;

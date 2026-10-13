@@ -1,6 +1,7 @@
 // Sauvegarde / ouverture de projet : l'utilisateur télécharge son projet en .json et le rouvre quand
 // il le souhaite (le brouillon automatique du navigateur utilise le même format, voir draft.ts).
 // Le fichier ouvert est traité comme non fiable : seules les propriétés et types connus sont conservés.
+import { cleanRetouches, cleanStamp } from './retouch';
 import { DEFAULT_FONT, isFontFamily } from './fonts';
 import { META_KEYS, type CanvasJSON, type DocMeta } from './editor';
 import { sanitizeLayout, type ColumnLayout } from './layout';
@@ -62,6 +63,7 @@ function cleanObject(o: unknown, depth = 0): Obj | null {
   if (typeof o.field !== 'string' || !/^[a-z0-9.]{1,60}$/i.test(o.field)) delete out.field;
   if (typeof o.codec !== 'string' || !/^[a-z]{1,30}$/i.test(o.codec)) delete out.codec;
   out.tpl = o.tpl === true;
+  cleanStamp(out);
   if (![0, 1, 2, 3].includes(o.heading as number)) delete out.heading;
   if (typeof o.sectionKey !== 'string' || !/^(c:)?[a-z0-9]{1,30}$/i.test(o.sectionKey)) delete out.sectionKey;
   // Groupe logique : identifiant et nom courts, en texte simple.
@@ -107,7 +109,10 @@ function cleanFill(v: unknown): FillState | null {
   const data = sanitizePersona(v.data);
   if (!template || !data) return null;
   const palette = PALETTES.find((p) => p.id === v.palette)?.id ?? PALETTES[0].id;
-  return { template, palette, data, linked: v.linked === true, touched: v.touched !== false };
+  const retouches = cleanRetouches(v.retouches, (k, value) => k === 'fill' || k === 'stroke' ? value === null || !!cleanColor(value)
+    : k === 'fontFamily' ? isFontFamily(value) : ['number', 'string', 'boolean'].includes(typeof value) && String(value).length <= 40);
+  const keys = Array.isArray(v.keys) ? v.keys.filter((k): k is string => typeof k === 'string' && k.length <= 80).slice(0, 500) : undefined;
+  return { template, palette, data, linked: v.linked === true, touched: v.touched !== false, ...(retouches ? { retouches } : {}), ...(keys ? { keys } : {}) };
 }
 
 export async function readProject(file: File): Promise<{ project: ProjectFile; dropped: number }> {

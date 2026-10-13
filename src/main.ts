@@ -17,6 +17,8 @@ import { setupContentForm, type FormTarget } from './ui/content-form';
 import { setupSidePanel } from './ui/sidepanel';
 import { setupPanelResize } from './ui/resize';
 import { QuickFill, type FillState } from './quickfill';
+import { setupAiChat } from './ui/ai-chat';
+import { setupChatWidget } from './ui/chat-widget';
 import { setupQuickBar } from './ui/quickbar';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -66,6 +68,12 @@ const side = setupSidePanel($('layers'), [
 ], 'content');
 const layers = setupLayers(ed, side.pane('layers'), side.badge('layers'), () => side.isShown('layers'));
 const form = setupContentForm(side.pane('content'), qf, { chooseTemplate: () => chooseTemplate() });
+const chat = setupChatWidget($<HTMLButtonElement>('btn-assistant'));
+setupAiChat(chat.root, ed, qf, (id) => {
+  palette = PALETTES.find((p) => p.id === id) ?? PALETTES[0];
+  form.render();
+  panel.render();
+}, chat.close);
 ed.onRestore = () => form.render();
 side.start();
 /** Section du modèle sélectionnée en entier sur la page (groupe), page liée au formulaire. */

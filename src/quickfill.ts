@@ -3,12 +3,13 @@
 // - modifier un texte sur la page met la fiche à jour (le texte connaît son champ) ;
 // - « Détacher » arrête le lien pour finir le design librement.
 // L'état fait partie de l'historique (annuler / rétablir) et du projet enregistré.
-import { FabricImage, type FabricObject, type Textbox } from 'fabric';
-import { META_KEYS, type DocMeta, type Editor, type MetaKey } from './editor';
+import { FabricImage, type Canvas, type FabricObject, type Textbox } from 'fabric';
+import { META_KEYS, type CanvasJSON, type DocMeta, type Editor, type MetaKey } from './editor';
+import { capture, retouch, stamp, type Retouches } from './retouch';
 import { isText } from './shapes';
 import { clonePersona, CONTENT_KEYS, filled, visiblePersona, type ContentKey, type Persona } from './templates/content';
 import { decodeField } from './templates/fields';
-import { ALL_TEMPLATES, buildFit, PALETTES, type Overflow, type TemplateDef } from './templates';
+import { ALL_TEMPLATES, buildFit, PALETTES, type Built, type Overflow, type TemplateDef } from './templates';
 
 export interface FillState {
   template: string;
@@ -18,6 +19,10 @@ export interface FillState {
   linked: boolean;
   /** La fiche a été modifiée (sinon, changer de modèle reprend ses données d'exemple). */
   touched: boolean;
+  /** Retouches des éléments du modèle, réappliquées à chaque régénération (même modèle). */
+  retouches?: Retouches;
+  /** Clés des éléments générés la dernière fois : un absent de la page a été supprimé. */
+  keys?: string[];
 }
 
 /** Textes qui affichent plusieurs sections à la fois (leur codec relit chacune). */
@@ -36,6 +41,38 @@ export interface PageSection {
   keys: ContentKey[];
   /** Identifiant d'une section ajoutée. */
   custom?: string;
+}
+
+/**
+ * Éléments ajoutés hors modèle, conservés quand la page se régénère : ceux placés sous tous les
+ * éléments du modèle restent en arrière-plan (formes de fond), les autres au premier plan.
+ */
+export function compose(canvas: Canvas, built: CanvasJSON) {
+  const objs = canvas.getObjects();
+  const first = objs.findIndex((o) => o.tpl);
+  const json = (o: FabricObject) => o.toObject() as Record<string, unknown>;
+  const below = objs.filter((o, i) => !o.tpl && first >= 0 && i < first).map(json);
+  const above = objs.filter((o, i) => !o.tpl && (first < 0 || i > first)).map(json);
+  return { background: built.background, objects: [...below, ...built.objects, ...above] };
+}
+
+/**
+ * Page régénérée : éléments du modèle marqués, retouches de la page affichée relevées puis
+ * réappliquées (seulement si le modèle ne change pas), éléments ajoutés à leur plan.
+ */
+export function composePage(canvas: Canvas, built: CanvasJSON, state: FillState | null, template = state?.template, reset = false) {
+  const objects = structuredClone(built.objects) as Record<string, unknown>[];
+  const keys = stamp(objects);
+  const kept = !!state && !reset && template === state.template;
+  const retouches = kept ? capture(canvas.getObjects() as unknown as Record<string, unknown>[], state.retouches ?? {}, state.keys ?? []) : {};
+  return { page: compose(canvas, { background: built.background, objects: retouch(objects, retouches) }), retouches, keys };
+}
+
+/** Enregistre retouches et clés dans la fiche (sans entrée vide). */
+function remember(s: FillState, { retouches, keys }: { retouches: Retouches; keys: string[] }) {
+  if (Object.keys(retouches).length) s.retouches = retouches;
+  else delete s.retouches;
+  s.keys = keys;
 }
 
 export class QuickFill {
@@ -94,6 +131,7 @@ export class QuickFill {
   /** Document sans modèle (page vierge, projet sans fiche). */
   clear() {
     clearTimeout(this.timer);
+    this.timer = 0;
     this.ed.fill = null;
     this.overflow = [];
     this.retouched = false;
@@ -112,6 +150,44 @@ export class QuickFill {
   schedule(delay = 280) {
     clearTimeout(this.timer);
     this.timer = window.setTimeout(() => void this.render(false), delay);
+  }
+
+  /** Termine les mises à jour en attente avant de capturer une révision pour l'IA. */
+  async flush() {
+    while (this.running) await this.running;
+    if (this.timer) await this.render(false);
+  }
+
+  /** Applique un aperçu déjà composé, sans réinitialiser l'historique. */
+  async applyProposal(next: FillState, built: Built & { density: number }) {
+    const overflow = this.overflow;
+    const density = this.density;
+    const retouched = this.retouched;
+    clearTimeout(this.timer);
+    this.timer = 0;
+    const composed = composePage(this.ed.canvas, built, this.state, next.template);
+    const fill = structuredClone(next);
+    remember(fill, composed);
+    this.regenerating = true;
+    try {
+      await this.ed.transaction(async () => {
+        this.ed.fill = fill;
+        this.applyMeta();
+        await this.ed.load(composed.page, false);
+      });
+      this.overflow = built.overflow;
+      this.density = built.density;
+      this.retouched = !!fill.retouches;
+      this.onExternalChange();
+    } catch (error) {
+      this.overflow = overflow;
+      this.density = density;
+      this.retouched = retouched;
+      throw error;
+    } finally {
+      this.regenerating = false;
+      this.onStatus();
+    }
   }
 
   /**
@@ -168,14 +244,15 @@ export class QuickFill {
     await this.render(false);
   }
 
-  /** Régénère la page depuis la fiche. `fresh` : nouveau document (nouvel historique). */
-  async render(fresh: boolean) {
+  /** Régénère la page depuis la fiche. `fresh` : nouveau document (nouvel historique). `reset` : retire les retouches. */
+  async render(fresh: boolean, reset = false) {
     // Une seule régénération à la fois : la suivante repart de l'état le plus récent.
     while (this.running) await this.running;
     const s = this.state;
     const def = this.def;
     if (!s || !def || (!s.linked && !fresh)) return;
     clearTimeout(this.timer);
+    this.timer = 0;
     this.running = (async () => {
       // Texte en cours d'édition : on le valide d'abord (la fiche le reprend).
       const a = this.ed.active() as (FabricObject & { isEditing?: boolean; exitEditing?: () => void }) | undefined;
@@ -185,10 +262,11 @@ export class QuickFill {
       const built = await buildFit(def, palette, s.data);
       this.overflow = built.overflow;
       this.density = built.density;
-      this.retouched = false;
-      // Les éléments ajoutés à la main (hors modèle) sont conservés, au premier plan.
-      const extras = fresh ? [] : this.ed.canvas.getObjects().filter((o) => !o.tpl).map((o) => o.toObject() as Record<string, unknown>);
-      const json = { background: built.background, objects: [...built.objects, ...extras] };
+      // Les éléments ajoutés à la main (hors modèle) sont conservés, à leur plan ; les retouches du modèle aussi.
+      const composed = composePage(this.ed.canvas, built, fresh ? null : s, s.template, reset);
+      remember(s, composed);
+      this.retouched = !!s.retouches;
+      const json = fresh ? { background: built.background, objects: composed.page.objects.filter((o) => o.tpl) } : composed.page;
       this.regenerating = true;
       try {
         await this.ed.load(json, fresh);
@@ -223,6 +301,11 @@ export class QuickFill {
     const meta = this.ed.meta;
     meta.kind = this.def!.kind;
     for (const k of META_KEYS) if (!meta.manual?.[k]) meta[k] = auto[k];
+  }
+
+  /** Rend aux éléments du modèle leur aspect d'origine (les éléments ajoutés restent). */
+  async resetRetouches() {
+    if (this.state?.linked) await this.render(false, true);
   }
 
   /** Change de palette en gardant la fiche. */

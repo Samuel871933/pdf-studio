@@ -4,6 +4,8 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "test:ai": "node --test tests/ai.test.mjs",
+    "test:ai:browser": "npm run build && node scripts/test-ai-browser.mjs",
     "icons": "node scripts/build-icons.mjs",
     "predev": "npm run icons",
     "dev": "vite",

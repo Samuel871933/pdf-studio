@@ -4,20 +4,43 @@
 
 Intégrer un chatbot capable de créer et modifier le contenu, les sections et la mise en page des documents, ainsi que de créer des modèles réutilisables selon les demandes de l’utilisateur.
 
-- Conserver l’hébergement statique sur GitHub Pages, sans backend obligatoire.
+- Le chatbot et l’éditeur restent **dans PDF Studio** : l’utilisateur écrit ou dicte, voit le résultat, retouche à la main et continue la conversation dans la même application.
+- Conserver l’hébergement statique sur GitHub Pages, **sans backend, proxy ni service intermédiaire**.
 - Ne financer aucun appel IA pour les utilisateurs : chacun fournit sa propre clé API Claude ou OpenAI et paie ses appels auprès du fournisseur.
+- Prévoir plusieurs fournisseurs avec des adaptateurs interchangeables et un moteur d’agent commun. « ChatGPT » désigne ici les modèles OpenAI accessibles par API, pas une session du site ChatGPT ou un abonnement utilisable comme clé API.
 - Ne demander aucune installation ni téléchargement de modèle.
-- **Ne jamais sauvegarder la clé API.** La conserver uniquement dans une variable en mémoire pendant la vie de la page. Un rechargement, une navigation ou une fermeture impose de la saisir à nouveau.
+- **Ne jamais sauvegarder la clé API en clair.** Par défaut, elle reste uniquement en mémoire. Sur consentement explicite, un coffre local chiffré permet de la retrouver après déverrouillage par mot de passe. Rechargement, navigation et fermeture verrouillent la session.
 - La clé n’appartient jamais au contexte envoyé au modèle : elle sert uniquement à l’authentification HTTP auprès du fournisseur choisi.
 - Permettre la modification complète du document via des commandes contrôlées et réversibles.
+- La conversation et les propositions restent en mémoire. Une option décochée par défaut, « Mémoriser cette connexion sur cet appareil », conserve ensemble fournisseur/modèle et clé chiffrée par fournisseur. Aucun mot de passe, clé en clair, journal réseau ou conversation n’est persisté. Ces données restent distinctes des projets et du brouillon local.
+- L’édition classique reste locale ; envoyer une demande IA transmet son contexte utile au fournisseur. La dictée peut également utiliser le service distant du navigateur. Ne plus présenter tout le site comme « rien n’est envoyé » lorsque ces fonctions sont disponibles.
 
-Ce document décrit une architecture à implémenter ; il ne signifie pas que ces fonctionnalités existent déjà.
+L’objectif produit est de créer un premier CV personnalisé rapidement (cible : deux minutes après configuration du compte API), puis de modifier contenu et design en boucle. Ce délai est un objectif à mesurer, pas une garantie indépendante du réseau ou du fournisseur.
+
+## État du développement — 13 octobre 2026
+
+Une première tranche est implémentée :
+
+- Onglet Assistant dans l’éditeur, saisie texte, choix du fournisseur, identifiant de modèle libre prérempli (OpenAI : `gpt-4.1-mini`, Claude : `claude-sonnet-5-5`) et clé masquée. Les clés dont le préfixe identifie clairement un autre fournisseur sont refusées avant toute requête ; le champ de clé est vidé lors d’un changement de fournisseur.
+- Adaptateurs HTTP directs OpenAI (Chat Completions avec outils, `store: false`) et Claude (Messages avec outils et en-tête autorisant explicitement l’accès navigateur). Aucun SDK supplémentaire ni URL API libre.
+- Session privée en mémoire, déconnexion/rechargement/restauration de page, annulation et délai de deux minutes. Aucun appel de connexion génératif automatique.
+- Outil commun `propose_document` : modifications partielles des champs, sections personnalisées, titres et masquage, choix parmi les modèles et palettes existants. Les listes fournies remplacent leurs collections ; aucun chemin de propriété arbitraire n’est accepté.
+- Validation locale stricte, bornes de taille, conservation de la photo localement et exclusion des exemples fictifs du contexte initial lorsque la fiche n’a pas été renseignée.
+- Boucle de composition et de correction bornée : jusqu’à quatre réponses API, dont au plus trois propositions ; pas de reprise automatique après erreur réseau ambiguë.
+- Aperçu visuel local, détail du contenu proposé, contrôle de révision au retour et à l’application, application explicite et transaction Annuler/Rétablir avec restauration en cas d’échec.
+- Les débordements bloquent l’application. Si l’utilisateur a retouché le modèle, le remplacement de ces retouches doit être explicitement accepté ; les éléments ajoutés hors modèle sont conservés.
+- Dictée facultative via la reconnaissance native du navigateur, avec indication du traitement potentiellement distant ; relecture et envoi manuel du texte.
+- Présentation de type chatbot : conversation défilante, bulles de messages, suggestions de démarrage, saisie ancrée en bas et indicateur de traitement. Réglages de connexion repliables, automatiquement repliés après connexion ; les aperçus sont des cartes compactes avec agrandissement et actions Appliquer/Rejeter. Entrée envoie, Maj + Entrée crée une nouvelle ligne. Le panneau de chat est adapté aux petits écrans.
+
+**Restent à développer** : paramètres de design persistants, commandes de placement/style des éléments, identifiants stables pour les entrées standard, création et export de modèles déclaratifs, pagination, découverte des modèles API disponibles et autres fournisseurs.
+
+Les tests utilisent des réponses API simulées : la compatibilité réelle CORS/authentification/outils depuis GitHub Pages doit encore être vérifiée avec des clés personnelles. Aucun appel facturé n’est nécessaire pour les tests locaux. Le développement ne prétend pas encore couvrir toutes les capacités du plan ci-dessous.
 
 ## Base existante et évolutions nécessaires
 
 | Élément actuel | Utilité pour l’intégration | Évolution nécessaire |
 |---|---|---|
-| `src/templates/content.ts` : `Persona` | Contenu structuré des CV et lettres | Permettre des sections personnalisées et des identifiants stables |
+| `src/templates/content.ts` : `Persona` | Contenu structuré, titres personnalisés, masquage et sections personnalisées avec identifiants | Ajouter des identifiants stables aux entrées standard et préserver les faits utilisateur |
 | `src/templates/index.ts` : `TemplateDef` | Catalogue de modèles | Ajouter des modèles déclaratifs créés par l’utilisateur |
 | `src/templates/templates.ts` | Mise en page des modèles par fonctions TypeScript | Extraire progressivement les paramètres et structures éditables |
 | `src/templates/kit.ts` : `Builder` | Construction des éléments et mesures de texte | Servir de base à un moteur de composition déclaratif |
@@ -34,15 +57,17 @@ Le remplissage rapide conserve les éléments ajoutés hors modèle, mais une r�
 
 Un panneau « Assistant IA » contient :
 
-1. Le choix du fournisseur et du modèle disponible.
-2. Un champ de clé API masqué, sans option de mémorisation.
-3. Une indication : « Clé conservée uniquement pendant cette ouverture de la page. Les données nécessaires à votre demande sont envoyées au fournisseur choisi. Les appels utilisent votre compte API. »
+1. Le choix du fournisseur et du modèle (identifiant saisi en première version ; découverte des modèles disponibles ensuite).
+2. Un champ de clé API masqué ; option unique de mémorisation de la connexion (fournisseur, modèle, clé chiffrée), décochée par défaut.
+3. Une indication : « Sans coffre, clé uniquement en mémoire. Les données nécessaires à votre demande sont envoyées au fournisseur choisi. Les appels utilisent votre compte API. »
 4. Un bouton de connexion et un bouton de déconnexion qui supprime la référence à la clé et annule les requêtes actives.
 5. La conversation, l’état de traitement, un bouton Stop et un résumé des changements.
+6. Un aperçu local avec Appliquer/Rejeter, détails des champs proposés et avertissements de débordement.
+7. Une dictée facultative : enregistrer une demande, relire le texte, puis l’envoyer. Le clavier reste disponible.
 
 Éviter tout test de connexion génératif silencieux susceptible de déclencher des frais. Préférer une vérification non générative si le fournisseur le permet, ou utiliser la première demande explicite de l’utilisateur.
 
-Exemples de demandes prises en charge :
+Exemples de demandes visées à terme (les actions de design libre et d’enregistrement de modèles ne sont pas encore disponibles) :
 
 - « Voici mon parcours, crée un CV sobre avec une colonne. »
 - « Ajoute une section Projets personnels avant la formation. »
@@ -51,7 +76,21 @@ Exemples de demandes prises en charge :
 - « Adapte le CV et la lettre à cette offre en conservant uniquement mes expériences réelles. »
 - « Enregistre cette composition comme modèle réutilisable dans mon projet. »
 
-Une demande explicite de modification peut autoriser son application directe, avec résumé et annulation. Une demande exploratoire ou plusieurs variantes produisent un aperçu avant application. L’agent demande une précision lorsqu’une information essentielle manque et ne fabrique pas de diplômes, d’employeurs ou de résultats chiffrés.
+La première version présente systématiquement une proposition avant application. Une application directe pourra devenir une préférence explicite après validation du moteur de transactions. L’agent demande une précision lorsqu’une information essentielle manque et ne fabrique pas de diplômes, d’employeurs ou de résultats chiffrés.
+
+## Intégrations de fournisseurs
+
+La conversation et les commandes ont un format interne commun, indépendant des formats OpenAI/Claude. Chaque adaptateur possède des domaines fixes, ses en-têtes d’authentification, son encodage des outils et sa normalisation des réponses, erreurs et tokens. Aucun adaptateur ne reçoit de fonction pour modifier directement le document.
+
+Ajouter un fournisseur consiste à vérifier sa documentation officielle, les requêtes navigateur avec la CSP active, l’accès aux outils du modèle et les erreurs, puis à implémenter l’adaptateur et des tests de contrat. Une API dite « compatible OpenAI » ne suffit pas à garantir la compatibilité réelle. Un fournisseur qui interdit les appels navigateur n’est pas proposé ; aucun proxy ne contourne cette limite.
+
+Les abonnements aux interfaces de chat ne remplacent pas les comptes API. La conservation des données côté fournisseur dépend de son contrat et de ses réglages : stockage uniquement local dans PDF Studio ne signifie pas absence de traitement ou de conservation chez le fournisseur.
+
+## Voix
+
+La voix est une entrée du même agent, pas un moteur séparé. La première version détecte `SpeechRecognition`/`webkitSpeechRecognition`, propose une dictée française et conserve le texte dans le champ de demande jusqu’à l’envoi. Elle affiche que le navigateur peut transmettre l’audio à son service distant. Refus du microphone ou absence de support : saisie texte disponible.
+
+Une éventuelle transcription par API sera un adaptateur distinct utilisant la clé de l’utilisateur et un endpoint navigateur vérifié, sans backend. La conversation vocale continue et la synthèse de réponse sont des évolutions séparées, pas des prérequis du configurateur.
 
 ## Architecture de l’agent
 
@@ -81,7 +120,7 @@ La boucle d’agent est exécutée dans le front : envoyer la demande, recevoir 
 
 - Stocker la clé dans un module de session privé, hors de l’état sérialisable du document.
 - Après saisie, vider le champ et retirer les références inutiles.
-- Ne jamais utiliser `localStorage`, `sessionStorage`, IndexedDB, cookie, URL, fichier de projet ou historique pour la clé.
+- Ne jamais utiliser de stockage persistant pour la clé en clair ni pour le mot de passe du coffre. Seul le coffre chiffré peut être placé dans `localStorage`, sur consentement explicite. Aucun secret ou coffre ne fait partie des fichiers de projet, de l’historique ou des exports.
 - Ne jamais inclure la clé dans un prompt, un résultat d’outil, une capture, un message d’erreur ou un log.
 - Envoyer la clé seulement dans les en-têtes d’authentification vers un domaine de fournisseur explicitement autorisé.
 - Ne pas accepter une URL API arbitraire en première version, afin d’éviter d’envoyer une clé au mauvais destinataire.
@@ -92,6 +131,23 @@ La boucle d’agent est exécutée dans le front : envoyer la demande, recevoir 
 Les SDK Claude et OpenAI proposent un mode navigateur explicite, généralement nommé `dangerouslyAllowBrowser`. Il faut vérifier les appels réels depuis le site de production, notamment les prérequêtes CORS, l’authentification, les endpoints retenus et le streaming. Une option SDK ne contourne pas une interdiction CORS.
 
 Si un endpoint ne permet pas les appels directs, le signaler sans utiliser de proxy public. Ne pas ajouter un backend ou un intermédiaire qui reçoit les clés sans décision explicite sur l’architecture.
+
+## Coffre local facultatif — implémenté
+
+Cette évolution remplace la décision initiale d’absence totale de persistance de connexion, à la demande explicite de l’utilisateur.
+
+- « Mémoriser cette connexion sur cet appareil » : une seule case pour fournisseur, modèle et clé chiffrée. Mot de passe confirmé, minimum 12 caractères, puis clic Connecter pour enregistrer. Décocher efface la connexion enregistrée du fournisseur choisi, y compris ses préférences si elles étaient actives. Un coffre existant du même fournisseur est remplacé ; les coffres des autres fournisseurs sont conservés.
+- Web Crypto natif : AES-GCM 256 bits ; clé dérivée du mot de passe par PBKDF2-HMAC-SHA-256, 600 000 itérations. Sel aléatoire de 16 octets et IV aléatoire de 12 octets à chaque enregistrement. Version, fournisseur et modèle sont authentifiés avec le ciphertext.
+- `localStorage` conserve seulement les métadonnées et le ciphertext, jamais le mot de passe ou la clé déchiffrée. Les identifiants de modèle ressemblant à une clé API sont refusés. Formats, tailles et paramètres cryptographiques sont validés avant déchiffrement.
+- Aucun déverrouillage ni appel réseau automatique. À la réouverture : choisir le fournisseur si nécessaire, saisir le mot de passe, cliquer Déverrouiller. La clé déchiffrée passe directement dans la session, pas dans le champ de clé.
+- Déconnecter/recharger/restaurer une page retire les secrets de la session et des champs, mais conserve le coffre. Oublier ma clé supprime le coffre et les préférences actives du fournisseur choisi, puis déconnecte la session.
+- HTTPS ou localhost et Web Crypto sont nécessaires. Stockage refusé, quota, coffre altéré, mauvais mot de passe : message explicite, sans réécriture silencieuse ni clé de secours en clair.
+- Les opérations cryptographiques en attente vérifient la génération de session avant de sauvegarder ou connecter : une fermeture ou déconnexion empêche une réactivation tardive.
+- Le chiffrement protège le coffre verrouillé contre sa lecture directe, pas un script malveillant pendant l’utilisation. Un mot de passe faible peut être attaqué hors ligne. Pas de récupération du mot de passe ; JavaScript ne garantit pas l’effacement physique des chaînes.
+
+Le fournisseur est choisi par deux boutons avec logos locaux OpenAI/Claude, indication de sélection et navigation clavier. Les anciens coffres restent compatibles ; les anciennes préférences seules préremplissent la première ouverture puis sont retirées.
+
+Implémentation : `src/ai/storage.ts`. Tests cryptographiques et parcours navigateur avec clés fictives. Aucune persistance de conversation ni de logs réseau n’est ajoutée.
 
 ## Format de document et modèles personnalisables
 
@@ -165,15 +221,16 @@ Chemins indicatifs à ajuster pendant l’implémentation :
 
 ```text
 src/ai/session.ts             Clé en mémoire, fournisseur, annulation
-src/ai/providers/openai.ts    Adaptateur API OpenAI
-src/ai/providers/claude.ts    Adaptateur API Claude
+src/ai/storage.ts             Préférences sur consentement et coffre chiffré facultatif
+src/ai/providers.ts           Contrat commun et adaptateurs OpenAI/Claude (à séparer si nécessaire)
 src/ai/agent.ts               Boucle d’outils et limites
-src/ai/context.ts             Contexte minimal, sans secrets
-src/ai/tools.ts               Définitions des outils
-src/ai/validation.ts          Validation structurelle et métier
-src/ai/transactions.ts        Aperçu, révisions et application réversible
+src/ai/schema.ts              Schémas d’outils et validation structurelle
 src/ui/ai-chat.ts             Panneau de conversation
-src/document/                Document métier et modèles déclaratifs
+src/editor.ts                Transactions et historique
+src/quickfill.ts             Application d’une composition préparée
+src/document/                À créer : document métier et modèles déclaratifs
+tests/ai.test.mjs             Tests de validation, contrats API et boucle d’agent simulée
+scripts/test-ai-browser.mjs   Parcours Chromium avec API interceptées et CSP de production
 ```
 
 ## Ordre de réalisation
@@ -182,27 +239,33 @@ src/document/                Document métier et modèles déclaratifs
 
 Tester les deux fournisseurs depuis l’origine GitHub Pages avec une clé saisie en mémoire : requête simple explicite, appels d’outils, streaming si retenu, annulation et erreurs. Ne jamais publier de clé de test.
 
+Les adaptateurs et tests simulés sont désormais en place. Le streaming est différé ; le modèle doit prendre en charge les outils sur l’endpoint retenu.
+
 ### 2. Construire la couche commune de commandes
 
 Ajouter des identifiants stables, la validation, les transactions et le contrôle de révision. Commencer par les champs existants, les changements de modèle/palette et les éléments libres. Brancher ces commandes à l’éditeur pour permettre aussi leur usage hors IA.
 
-### 3. Rendre les sections et modèles déclaratifs
+### 3. Livrer l’assistant sur les modèles existants
+
+Première tranche implémentée : chat, propositions de contenu/sections, choix de modèle/palette, aperçu, transactions et dictée native. Valider la production avant de présenter les intégrations comme pleinement vérifiées. Les propositions basées sur les collections complètes et une révision stricte évitent en première version d’agir sur des indices devenus obsolètes.
+
+### 4. Rendre le design et les modèles déclaratifs
 
 Introduire les sections personnalisées et le moteur de composition. Migrer un modèle simple, vérifier l’édition manuelle puis les changements de contenu, et étendre aux autres modèles. Versionner les projets, conserver la lecture des fichiers existants et définir l’export de modèles sans données personnelles.
 
-### 4. Intégrer l’agent complet
+### 5. Étendre l’agent au design complet
 
 Ajouter le panneau de chat, les instructions, les outils et la boucle de correction du rendu. Permettre création, restructuration et modification complète à travers les primitives disponibles.
 
-### 5. Vérifier l’ensemble et documenter
+### 6. Vérifier l’ensemble et documenter
 
 Vérifier les cas métier et la production avec CSP active. Mettre à jour les explications sur la confidentialité et l’usage des clés personnelles.
 
 ## Critères d’acceptation
 
 - Un utilisateur peut connecter son compte API sans installer de logiciel ni télécharger de modèle.
-- Aucune clé n’est persistée ou incluse dans les documents, prompts, logs ou exports.
-- Recharger la page ou se déconnecter impose une nouvelle saisie ; une restauration de page ne réactive pas une ancienne connexion.
+- Aucune clé en clair n’est persistée ; aucun secret ou coffre n’est inclus dans les documents, prompts, logs ou exports. Le coffre chiffré n’existe qu’après un enregistrement explicite.
+- Recharger la page ou se déconnecter impose une nouvelle saisie ou un déverrouillage du coffre ; une restauration de page ne réactive jamais une ancienne connexion.
 - Le chat peut modifier une section précise, en ajouter une personnalisée et refaire la composition avec les primitives disponibles.
 - Le modèle peut être enregistré puis réutilisé avec un autre contenu.
 - Une modification du contenu conserve les styles et structures personnalisés.
@@ -219,4 +282,4 @@ Vérifier les cas métier et la production avec CSP active. Mettre à jour les e
 - [Authentification et confidentialité des clés OpenAI](https://developers.openai.com/api/reference/overview)
 - [JSON Schema : validation des propriétés d’objet](https://json-schema.org/understanding-json-schema/reference/object)
 
-Les possibilités d’API, les modèles et les règles CORS devront être revérifiés au moment de l’implémentation. Le stockage uniquement en mémoire est une décision de conception ; il ne supprime pas les risques d’un usage de clés secrètes dans un navigateur.
+Les possibilités d’API, les modèles et les règles CORS devront être revérifiés au moment de l’implémentation. La clé utilisée reste en mémoire ; son éventuelle copie chiffrée est facultative. Cela ne supprime pas les risques d’un usage de clés secrètes dans un navigateur.

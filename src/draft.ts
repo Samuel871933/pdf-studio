@@ -1,6 +1,6 @@
 // Brouillon automatique : le document en cours (un seul) est conservé dans le navigateur pour le
 // retrouver après une fermeture de la page. Ouvrir ou créer un autre document le remplace.
-// Il ne quitte jamais l'appareil ; l'utilisateur peut le désactiver ou l'effacer (fenêtre « 100 % local »).
+// L'utilisateur peut le désactiver ou l'effacer (fenêtre « Local hors IA »).
 // Relu au démarrage comme un fichier ouvert : même validation que les projets .json.
 
 const KEY = 'pdf-studio.draft';

@@ -595,7 +595,9 @@ export function setupContentForm(root: HTMLElement, qf: QuickFill, actions: { ch
         nodes.push(h('div', { class: 'cf-info' }, 'Espacements resserrés pour que tout tienne sur la page.'));
       }
       if (qf.retouched) {
-        nodes.push(h('div', { class: 'cf-note' }, 'Retouche manuelle : elle sera recalculée à la prochaine modification du formulaire. Pour la garder, détachez la page.'));
+        const reset = h('button', { type: 'button' }, 'Réinitialiser');
+        reset.addEventListener('click', () => void qf.resetRetouches());
+        nodes.push(h('div', { class: 'cf-note' }, 'Retouches du modèle conservées : couleurs, polices, positions et suppressions sont réappliquées quand le contenu change. ', reset));
       }
     }
     statusBox.replaceChildren(...nodes.filter((n): n is Node | string => !!n));
