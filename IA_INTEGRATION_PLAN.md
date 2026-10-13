@@ -32,7 +32,15 @@ Une première tranche est implémentée :
 - Dictée facultative via la reconnaissance native du navigateur, avec indication du traitement potentiellement distant ; relecture et envoi manuel du texte.
 - Présentation de type chatbot : conversation défilante, bulles de messages, suggestions de démarrage, saisie ancrée en bas et indicateur de traitement. Réglages de connexion repliables, automatiquement repliés après connexion ; les aperçus sont des cartes compactes avec agrandissement et actions Appliquer/Rejeter. Entrée envoie, Maj + Entrée crée une nouvelle ligne. Le panneau de chat est adapté aux petits écrans.
 
-**Restent à développer** : paramètres de design persistants, commandes de placement/style des éléments, identifiants stables pour les entrées standard, création et export de modèles déclaratifs, pagination, découverte des modèles API disponibles et autres fournisseurs.
+**Restent à développer** :
+
+- [ ] Bloquer « Appliquer » quand une proposition de l’IA introduit un texte invisible, recouvert, hors page ou une consigne adressée à une IA (aujourd’hui seulement signalés dans « Points d’attention »).
+- [ ] Lister dans la carte d’aperçu de mise en page les textes ajoutés ou réécrits par `edit_page` (avant / après), comme pour le contenu.
+- [ ] Plafond de tokens par session, réglable dans les paramètres de connexion.
+- [ ] Identifiants stables pour les entrées standard (les retouches des formes d’une section suivent leur rang).
+- [ ] Création et export de modèles déclaratifs.
+- [ ] Pagination.
+- [ ] Découverte des modèles API disponibles et autres fournisseurs.
 
 Les tests utilisent des réponses API simulées : la compatibilité réelle CORS/authentification/outils depuis GitHub Pages doit encore être vérifiée avec des clés personnelles. Aucun appel facturé n’est nécessaire pour les tests locaux. Le développement ne prétend pas encore couvrir toutes les capacités du plan ci-dessous.
 
