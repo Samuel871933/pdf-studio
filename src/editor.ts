@@ -13,6 +13,13 @@ declare module 'fabric' {
     /** Champ de la fiche affiché par ce texte (« experience.0.title ») et sa mise en forme. */
     field?: string;
     codec?: string;
+    /**
+     * Niveau de titre imposé par le modèle (1 nom, 2 section, 3 intitulé ; 0 : jamais un titre).
+     * Sans lui, le rôle est deviné d'après la mise en forme (capitales, gras, taille).
+     */
+    heading?: HeadingLevel;
+    /** Section de la fiche à laquelle appartient l'élément généré (« experience », « c:<id> » pour une section ajoutée). */
+    sectionKey?: string;
   }
   interface SerializedObjectProps {
     locked?: boolean;
@@ -21,8 +28,12 @@ declare module 'fabric' {
     tpl?: boolean;
     field?: string;
     codec?: string;
+    heading?: HeadingLevel;
+    sectionKey?: string;
   }
 }
+
+export type HeadingLevel = 0 | 1 | 2 | 3;
 
 /** Format A4 en points PDF (1 unité du canevas = 1 pt). */
 export const PAGE = { w: 595.28, h: 841.89 } as const;
@@ -50,7 +61,7 @@ export interface CanvasJSON {
   objects: Record<string, unknown>[];
 }
 
-FabricObject.customProperties = ['locked', 'groupId', 'groupName', 'tpl', 'field', 'codec'];
+FabricObject.customProperties = ['locked', 'groupId', 'groupName', 'tpl', 'field', 'codec', 'heading', 'sectionKey'];
 Object.assign(FabricObject.ownDefaults, {
   originX: 'left',
   originY: 'top',
@@ -281,9 +292,12 @@ export class Editor {
     return this.canvas.getActiveObject();
   }
 
+  /** Suppression interceptée (section du modèle supprimée dans la fiche) : renvoie `true` si elle est traitée. */
+  onRemove: (objs: FabricObject[]) => boolean = () => false;
+
   removeSelection() {
     const objs = this.canvas.getActiveObjects();
-    if (!objs.length) return;
+    if (!objs.length || this.onRemove(objs)) return;
     this.canvas.discardActiveObject();
     this.canvas.remove(...objs);
     this.normalizeGroups();
@@ -359,6 +373,8 @@ export class Editor {
 
   /** Prochaine sélection : un élément précis, sans l'étendre à son groupe. */
   private direct = false;
+  /** Groupe « ouvert » par double-clic : ses éléments se sélectionnent un par un jusqu'à ce qu'on en sorte. */
+  private entered: string | null = null;
   private expanding = false;
 
   groupMembers(id: string): FabricObject[] {
@@ -487,7 +503,9 @@ export class Editor {
 
   /**
    * Comportement « à la Figma » : un clic sur un élément groupé sélectionne tout le groupe ;
-   * double-clic (ou Ctrl/Cmd + clic) : sélectionne l'élément seul (un texte passe en édition).
+   * double-clic (ou Ctrl/Cmd + clic) : sélectionne l'élément seul, prêt à être déplacé.
+   * Après un double-clic, le groupe reste ouvert : un clic sélectionne directement un autre de ses éléments ;
+   * un clic sur un texte déjà sélectionné le passe en édition. Échap ou un clic hors du groupe le referme.
    */
   private setupGroups() {
     const c = this.canvas;
@@ -497,12 +515,18 @@ export class Editor {
       const info = (c as unknown as { _targetInfo?: { target?: FabricObject } })._targetInfo;
       const t = info?.target;
       const pe = e as MouseEvent;
-      if (!t?.groupId || pe.button !== 0 || pe.shiftKey) return;
-      if (pe.ctrlKey || pe.metaKey) {
+      if (pe.button !== 0) return;
+      if (!t?.groupId) {
+        this.entered = null;
+        return;
+      }
+      if (pe.shiftKey) return;
+      if (t === this.active()) return; // élément déjà sélectionné seul (sélection directe)
+      if (pe.ctrlKey || pe.metaKey || t.groupId === this.entered) {
         this.direct = true;
         return;
       }
-      if (t === this.active()) return; // élément déjà sélectionné seul (sélection directe)
+      this.entered = null;
       const members = this.groupMembers(t.groupId).filter((o) => o.visible);
       if (members.length > 1) info!.target = new ActiveSelection(members, { canvas: c });
     });
@@ -536,12 +560,20 @@ export class Editor {
       this.select([]);
       const hit = [...members].reverse().find((o) => o.visible && o.containsPoint(p));
       if (!hit) return;
+      // Pas d'édition immédiate : l'élément se déplace d'abord ; un clic de plus édite un texte.
+      this.entered = hit.groupId ?? null;
       this.select([hit], true);
-      if (isText(hit) && !hit.locked) {
-        hit.enterEditing();
-        hit.selectAll();
-      }
     });
+  }
+
+  /** Échap dans un groupe ouvert : on remonte à la sélection du groupe entier. */
+  private leaveGroup(): boolean {
+    const id = this.entered;
+    this.entered = null;
+    const a = this.active();
+    if (!id || !a || a.groupId !== id) return false;
+    this.select(this.groupMembers(id).filter((o) => o.visible));
+    return true;
   }
 
   /** Masque ou affiche un élément (masqué : ni affiché, ni exporté, ni sélectionnable). */
@@ -1005,7 +1037,7 @@ export class Editor {
     else if (mod && e.shiftKey && k === 'l') this.toggleLock();
     else if (mod && k === 'g') e.shiftKey ? this.ungroup() : this.group();
     else if (k === 'delete' || k === 'backspace') this.removeSelection();
-    else if (k === 'escape') this.settle();
+    else if (k === 'escape') this.leaveGroup() || this.settle();
     else if (k === 'g' && !mod) this.setAids({ showGrid: !this.showGrid });
     else if (k === 'm' && !mod) this.setAids({ snapEnabled: !this.snapEnabled });
     else if (e.key === '?') this.onHelp();

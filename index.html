@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="referrer" content="no-referrer" />
     <meta name="color-scheme" content="light dark" />
-    <meta name="description" content="Éditeur de PDF dans le navigateur : formes, textes, couleurs, images. 100 % local, rien n'est envoyé ni stocké." />
+    <meta name="description" content="Éditeur de PDF dans le navigateur : formes, textes, couleurs, images. 100 % local, rien n'est envoyé : le document en cours reste sur votre appareil." />
     <title>PDF Studio</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
   </head>
@@ -15,12 +15,12 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h8l6 6v14H6z" fill="currentColor" opacity=".2"/><path d="M6 2h8l6 6v14H6zM14 2v6h6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
         <span>PDF Studio</span>
       </div>
-      <span class="privacy" title="Aucune donnée ne quitte votre navigateur : pas de serveur, pas de cookie, pas de stockage.">
+      <button type="button" id="btn-privacy" class="privacy" title="Aucune donnée ne quitte votre navigateur. Brouillon automatique du document en cours : cliquez pour le gérer.">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 11V8a5 5 0 0 1 10 0v3M5 11h14v10H5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
         100 % local
-      </span>
+      </button>
       <div class="group">
-        <button id="btn-new" title="Page vierge">Nouveau</button>
+        <button id="btn-new" title="Page vierge : elle se construit au fil du formulaire (onglet Contenu)">Nouveau</button>
         <button id="btn-template" title="Choisir un modèle de CV ou de lettre">Modèles</button>
         <button id="btn-open" title="Ouvrir un projet .json">Ouvrir</button>
         <button id="btn-save" title="Enregistrer le projet en .json (Ctrl+S)">Enregistrer</button>

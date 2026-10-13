@@ -1,7 +1,7 @@
 import type { CanvasJSON } from '../editor';
-import { DEVELOPER, GENERALIST, HOSPITALITY, LETTER_SAMPLE, STUDENT, type Persona } from './content';
+import { CONTENT_KEYS, DEVELOPER, EMPTY, GENERALIST, HOSPITALITY, LETTER_SAMPLE, STUDENT, visiblePersona, type ContentKey, type Persona } from './content';
 import { PALETTES, type Overflow, type Palette } from './kit';
-import { banner, classic, hybrid, junior, letter, letterClassic, organic, sidebar, tech, timeline } from './templates';
+import { banner, blank, classic, hybrid, junior, letter, letterClassic, organic, sidebar, tech, timeline } from './templates';
 
 export { PALETTES, type Overflow, type Palette };
 
@@ -32,6 +32,11 @@ export interface TemplateDef {
   /** Données d'exemple (fictives) affichées tant que la fiche n'a pas été remplie. */
   sample: Persona;
   sections: Section[];
+  /**
+   * Sections après lesquelles une section ajoutée peut se placer (par défaut : celles affichées).
+   * Ailleurs, elle se place après la formation.
+   */
+  hosts?: ContentKey[];
   build(p: Palette, data: Persona, density?: number): Built | Promise<Built>;
 }
 
@@ -70,7 +75,7 @@ export const TEMPLATES: TemplateDef[] = [
   },
   {
     id: 'sidebar', kind: 'cv', name: 'Barre latérale', ats: 'Visuel', badges: ['Graphique', 'Photo'], docTitle: 'CV', sample: GENERALIST, sections: ['photo', 'identity', 'skills', 'tools', 'experience', 'education', 'languages', 'interests'],
-    build: sidebar,
+    hosts: ['skills', 'tools', 'experience', 'education', 'languages'], build: sidebar,
     description: 'Mise en page graphique en panneaux. Plutôt pour un envoi direct à un recruteur ou un réseau que pour un portail.',
   },
   {
@@ -92,6 +97,28 @@ export const TEMPLATES: TemplateDef[] = [
 
 export const DEFAULT_TEMPLATE = 'sidebar';
 
+/** Modèle « Vierge » : fiche vide, la page se construit au fil du formulaire (« Nouveau », « Page vierge »). */
+export const BLANK_TEMPLATE: TemplateDef = {
+  id: 'blank', kind: 'cv', name: 'Vierge', ats: 'Idéal ATS', badges: ['Page vide', '1 colonne'], docTitle: 'CV', sample: EMPTY,
+  sections: ['photo', 'identity', 'github', 'profile', 'experience', 'education', 'achievements', 'skills', 'tools', 'languages', 'interests'],
+  build: blank,
+  description: 'Page vide qui se construit au fil du formulaire : chaque section apparaît dès qu’elle est remplie.',
+};
+
+/** Modèles connus (galerie + Vierge) : ouverture d'un projet, remplissage rapide. */
+export const ALL_TEMPLATES: TemplateDef[] = [...TEMPLATES, BLANK_TEMPLATE];
+
+/** Sections après lesquelles le modèle sait placer une section ajoutée. */
+export function hostsOf(def: TemplateDef): ContentKey[] {
+  return def.hosts ?? CONTENT_KEYS.filter((k) => def.sections.includes(k));
+}
+
+/** Section après laquelle une section ajoutée s'affiche réellement dans ce modèle. */
+export function anchorIn(def: TemplateDef, after: ContentKey): ContentKey {
+  const hosts = hostsOf(def);
+  return hosts.includes(after) ? after : hosts.includes('education') ? 'education' : hosts.at(-1) ?? after;
+}
+
 /** Densités essayées tour à tour quand le contenu déborde (espacements de plus en plus serrés). */
 const DENSITIES = [1, 0.85, 0.7, 0.55];
 
@@ -100,6 +127,11 @@ const DENSITIES = [1, 0.85, 0.7, 0.55];
  * `overflow` reste rempli si même la densité la plus serrée ne suffit pas.
  */
 export async function buildFit(def: TemplateDef, p: Palette, data: Persona): Promise<Built & { density: number }> {
+  // Sections masquées : vidées sur une copie, chaque modèle les saute (titre compris).
+  data = visiblePersona(data);
+  // Section ajoutée après une section que ce modèle n'affiche pas : elle suit la formation.
+  if (data.custom?.some((c) => anchorIn(def, c.after) !== c.after))
+    data = { ...data, custom: data.custom.map((c) => ({ ...c, after: anchorIn(def, c.after) })) };
   let last: Built | null = null;
   for (const d of DENSITIES) {
     last = await def.build(p, data, d);

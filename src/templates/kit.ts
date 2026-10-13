@@ -6,7 +6,7 @@ import { Circle, Color, FabricImage, Line, Path, Polygon, Rect, Textbox, type Fa
 import { applyLock, type CanvasJSON } from '../editor';
 import { placeholderPhoto } from '../images';
 import { fillFrame, iconPath, makeRound } from '../shapes';
-import type { Entry, Persona } from './content';
+import { hasContent, isEmptySection, type ContentKey, type Entry, type Persona } from './content';
 
 export type { Entry };
 
@@ -52,6 +52,23 @@ export function mix(a: string, b: string, t: number): string {
   return new Color(`rgb(${m(r1, r2)},${m(g1, g2)},${m(b1, b2)})`).toHex().toLowerCase().replace(/^/, '#');
 }
 
+/** Mise en page des sections ajoutées dans une colonne (voir `Builder.customs`). */
+export interface CustomRender {
+  x: number;
+  w: number;
+  /** Titre de section ; renvoie la position sous le titre. */
+  heading: (title: string, y: number) => number;
+  /** Affichage d'une entrée (par défaut, `Builder.entry` avec `entryOpts`). */
+  entry?: (e: Entry, y: number, path: string) => number;
+  entryOpts?: { datesRight?: boolean; gap?: number };
+  /** Style des listes et paragraphes. */
+  body?: TextOpts;
+  /** Espace avant chaque section (à la suite d'un bloc qui n'a pas d'espace après lui). */
+  lead?: number;
+  /** Espace après chaque section. */
+  gap?: number;
+}
+
 /** Section qui dépasse de sa zone (page ou panneau), de `by` points. */
 export interface Overflow {
   section: string;
@@ -63,7 +80,7 @@ export class Builder {
   private flowStart = 0;
   private marks: number[] = [];
   private sameRowNext = false;
-  private current: { id: string; name: string; locked: boolean } | null = null;
+  private current: { id: string; name: string; locked: boolean; key?: string } | null = null;
   private groupCount = 0;
   readonly overflow: Overflow[] = [];
 
@@ -95,7 +112,7 @@ export class Builder {
     // Élément généré par le modèle (régénéré par le remplissage rapide).
     o.set({ tpl: true });
     if (this.current) {
-      o.set({ groupId: this.current.id, groupName: this.current.name });
+      o.set({ groupId: this.current.id, groupName: this.current.name, sectionKey: this.current.key });
       if (this.current.locked) applyLock(o, true);
     }
     this.objs.push(o);
@@ -128,6 +145,8 @@ export class Builder {
   }
 
   text(str: string, x: number, y: number, w: number, opts: TextOpts = {}) {
+    // L'intitulé de poste n'est jamais un titre de section, même saisi ou affiché en capitales.
+    if (opts.field === 'title' && opts.heading === undefined) opts = { ...opts, heading: 0 };
     return this.add(
       new Textbox(str, {
         left: x,
@@ -191,31 +210,72 @@ export class Builder {
     }
   }
 
+  /** La section a du contenu à afficher (vide ou masquée : ni titre ni contenu). */
+  has(key: ContentKey) {
+    return !isEmptySection(this.data, key);
+  }
+
+  /** Titre d'une section : celui choisi dans la fiche, sinon celui du modèle. */
+  label(key: ContentKey, fallback: string) {
+    return this.data.labels?.[key]?.trim() || fallback;
+  }
+
+  /** Début d'une section standard : groupe de calques à son nom ; renvoie son titre. */
+  section(key: ContentKey, fallback: string) {
+    const t = this.label(key, fallback);
+    this.group(t);
+    this.current!.key = key;
+    return t;
+  }
+
+  /**
+   * Sections ajoutées placées après `after`, mises en page comme les autres sections de la même colonne.
+   * Chaque modèle fournit son titre de section (`heading`) et, si besoin, sa façon d'afficher une entrée.
+   */
+  customs(after: ContentKey, y: number, r: CustomRender): number {
+    (this.data.custom ?? []).forEach((c, i) => {
+      if (c.after !== after || !hasContent(c)) return;
+      const path = `custom.${i}`;
+      this.group(c.title.trim() || 'Section');
+      this.current!.key = `c:${c.id}`;
+      y += this.g(r.lead ?? 0);
+      y = r.heading(c.title.trim() || 'Section', y);
+      if (c.kind === 'entries')
+        c.entries.forEach((e, k) => {
+          if (e.title.trim() || e.org.trim()) y = r.entry ? r.entry(e, y, `${path}.entries.${k}`) : this.entry(e, r.x, y, r.w, { ...r.entryOpts, path: `${path}.entries.${k}` });
+        });
+      else if (c.kind === 'list') y = this.bullets(c.items, r.x, y, r.w, { ...r.body, field: `${path}.items` });
+      else y = this.para(c.text, r.x, y, r.w, { ...r.body, field: `${path}.text` });
+      y += this.g(r.gap ?? 10);
+    });
+    return y;
+  }
+
   heading(str: string, x: number, y: number, w: number, style: HeadingStyle = 'rule', color = this.P.primary) {
     const P = this.P;
     this.mark();
     switch (style) {
       case 'rule': {
-        const t = this.text(str.toUpperCase(), x, y, w, { fontWeight: 'bold', fontSize: 10.5, fill: color });
+        const t = this.text(str.toUpperCase(), x, y, w, { fontWeight: 'bold', fontSize: 10.5, fill: color, heading: 2 });
         const ly = y + t.height + 3;
         this.line(x, ly, x + w, ly, P.secondary, 0.8);
         return ly + this.g(7);
       }
       case 'bar': {
-        const t = this.text(str.toUpperCase(), x + 10, y, w - 10, { fontWeight: 'bold', fontSize: 10.5, fill: color });
+        const t = this.text(str.toUpperCase(), x + 10, y, w - 10, { fontWeight: 'bold', fontSize: 10.5, fill: color, heading: 2 });
         this.rect(x, y + 1, 4, t.height - 2, P.secondary);
         return y + t.height + this.g(6);
       }
       case 'big': {
-        const t = this.text(str.toUpperCase(), x, y, w, { fontFamily: 'Arima', fontWeight: 'bold', fontSize: 19, lineHeight: 1, fill: color });
+        const t = this.text(str.toUpperCase(), x, y, w, { fontFamily: 'Arima', fontWeight: 'bold', fontSize: 19, lineHeight: 1, fill: color, heading: 2 });
         return y + t.height + this.g(7);
       }
       case 'caps': {
-        const t = this.text(str.toUpperCase(), x, y, w, { fontFamily: 'Montserrat', fontWeight: 'bold', fontSize: 9.5, fill: P.secondary });
+        const t = this.text(str.toUpperCase(), x, y, w, { fontFamily: 'Montserrat', fontWeight: 'bold', fontSize: 9.5, fill: P.secondary, heading: 2 });
         return y + t.height + this.g(6);
       }
       case 'onDark': {
-        const t = this.text(str.toUpperCase(), x, y, w, { fontFamily: 'Montserrat', fontWeight: 'bold', fontSize: 9.5, fill: P.onPrimary });
+        const t = this.text(str.toUpperCase(), x, y, w, { fontFamily: 'Montserrat', fontWeight: 'bold', fontSize: 9.5, fill: P.onPrimary, heading: 2 });
         const ly = y + t.height + 3;
         this.line(x, ly, x + 28, ly, P.onPrimarySoft, 1.5);
         return ly + this.g(8);
@@ -238,7 +298,7 @@ export class Builder {
     const datesRight = opts.datesRight ?? true;
     const f = (k: string) => (opts.path ? `${opts.path}.${k}` : undefined);
     const dw = 120;
-    const title = this.text(e.title, x, y, datesRight ? w - dw : w, { fontWeight: 'bold', fontSize: 11, field: f('title') });
+    const title = this.text(e.title, x, y, datesRight ? w - dw : w, { fontWeight: 'bold', fontSize: 11, field: f('title'), heading: 3 });
     if (datesRight) this.text(e.dates, x + w - dw, y + 1.5, dw, { fontSize: 9.5, fill: P.muted, textAlign: 'right', field: f('dates') });
     y += title.height + 1;
     // Ligne « organisation » (+ dates quand elles ne sont pas à droite) ; un champ vide est omis.
@@ -260,7 +320,7 @@ export class Builder {
     this.text(e.dates, x, y + 1.5, dateW - 10, { fontSize: 9.5, fill: P.muted, field: f('dates') });
     const cx = x + dateW;
     const cw = w - dateW;
-    const title = this.text(e.title, cx, y, cw, { fontWeight: 'bold', fontSize: 11, field: f('title') });
+    const title = this.text(e.title, cx, y, cw, { fontWeight: 'bold', fontSize: 11, field: f('title'), heading: 3 });
     y += title.height + 1;
     if (e.org) y = this.para(e.org, cx, y, cw, { fontSize: 9.5, fill: P.secondary, field: f('org') }, 3);
     if (e.text) y = this.para(e.text, cx, y, cw, { field: f('text') }, 2);

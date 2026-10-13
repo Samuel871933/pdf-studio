@@ -85,7 +85,7 @@ export function openGallery(opts: {
   const blank = h('button', { type: 'button', class: 'tpl-card blank' },
     h('div', { class: 'tpl-thumb' }, h('span', {}, '+')),
     h('strong', {}, 'Page vierge'),
-    h('span', { class: 'hint' }, 'Partir de zéro, avec les repères de colonnes si besoin.'),
+    h('span', { class: 'hint' }, 'Fiche vide : chaque section apparaît sur la page dès que vous la remplissez dans l’onglet Contenu.'),
   );
   blank.addEventListener('click', () => {
     m.close();

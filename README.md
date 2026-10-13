@@ -2,7 +2,7 @@
 
 Éditeur de PDF qui fonctionne entièrement dans le navigateur : formes, textes, couleurs, images, positions libres, puis export en **PDF vectoriel** (texte net et sélectionnable, polices intégrées).
 
-**100 % local** : aucun serveur, aucun cookie, aucun stockage. Rien ne quitte le navigateur.
+**100 % local** : aucun serveur, aucun cookie. Rien ne quitte le navigateur ; seul le document en cours est gardé en brouillon sur l’appareil (désactivable).
 
 ## Fonctionnalités
 
@@ -59,7 +59,7 @@ Il compare aussi le document à une **offre d'emploi** collée : pourcentage de 
 |---|---|
 | Aucune donnée envoyée | Pas de backend ni de statistiques ; les scripts, polices et icônes sont intégrés au site, sans CDN |
 | Content-Security-Policy | `connect-src 'self'`, `script-src 'self'`, `object-src 'none'`, Trusted Types… (injectée en `<meta>` au build) |
-| Aucun stockage | Pas de cookie, `localStorage` ni IndexedDB : fermer la page efface tout (une alerte prévient s'il y a des modifications) |
+| Stockage limité à l'appareil | Pas de cookie ni IndexedDB, rien n'est envoyé. Le `localStorage` garde un **brouillon automatique du document en cours** (un seul : en ouvrir ou en créer un autre le remplace) pour le retrouver après une fermeture de la page, ainsi que les préférences d'interface (largeur des panneaux). Le badge « 100 % local » permet de désactiver le brouillon ou de l'effacer (conseillé sur un ordinateur partagé). Brouillon désactivé ou trop volumineux : une alerte prévient avant de fermer un document modifié. |
 | Images assainies | Décodées puis ré-encodées via un canvas, ce qui supprime les EXIF/GPS et tout contenu caché ; taille limitée. Les SVG ne sont jamais affichés tels quels : seule leur géométrie est extraite (icônes) |
 | Projets validés | À l'ouverture, seuls les types et propriétés connus sont conservés ; les URL externes et les motifs sont rejetés |
 | Métadonnées PDF | Sans modèle relié, l'auteur reste vide ; avec le remplissage rapide, il reprend le nom saisi (modifiable ou effaçable) |

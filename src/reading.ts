@@ -31,6 +31,9 @@ const letters = (s: string) => s.replace(/[^\p{L}]/gu, '');
 export function textRole(t: Textbox, maxFont: number): Role {
   const txt = t.text.trim();
   if (isBulletList(t)) return 'L';
+  // Niveau imposé par le modèle : titres sans capitales ni gras (modèle Organique),
+  // ou texte en capitales qui n'est pas un titre (intitulé de poste).
+  if (t.heading !== undefined) return t.heading ? (`H${t.heading}` as const) : 'P';
   const single = !txt.includes('\n') || txt.split('\n').length <= 2;
   const l = letters(txt);
   const upper = l.length > 1 && l === l.toUpperCase();
@@ -75,6 +78,43 @@ function freeRun(items: Item[], x: number, top: number, bottom: number): [number
   return best;
 }
 
+/** Blanc minimal entre l'en-tête d'une colonne et la suite (en deçà, c'est un titre suivi de son contenu). */
+const HEAD_GAP = 18;
+/** Taille à partir de laquelle un texte en haut de colonne est un en-tête (nom, intitulé). */
+const HEAD_FONT = 14;
+
+const textsOf = (col: Item[]) => col.filter((b) => isText(b.obj)).sort((a, b) => a.y0 - b.y0);
+const fontOf = (b: Item) => (b.obj as Textbox).fontSize * (b.obj.scaleY ?? 1);
+
+/**
+ * En-tête d'une colonne : ses premiers textes, s'ils finissent avant le premier texte de l'autre colonne
+ * (ex. le nom en haut à droite, au-dessus d'une colonne gauche qui commence plus bas).
+ * On coupe au dernier blanc franc : un titre de section collé à son contenu reste avec lui.
+ */
+function columnHead(col: Item[], otherTop: number): Item[] {
+  const texts = textsOf(col);
+  let n = 0;
+  while (n < texts.length && texts[n].y1 <= otherTop) n++;
+  for (let k = n; k > 0; k--) {
+    const next = texts[k]?.y0 ?? Infinity;
+    if (next - texts[k - 1].y1 >= HEAD_GAP) return texts.slice(0, k);
+  }
+  return [];
+}
+
+/** Abscisse d'une gouttière qu'aucune boîte ne traverse, avec du contenu de part et d'autre. */
+function splitX(items: Item[]): number | null {
+  const left = Math.min(...items.map((b) => b.x0));
+  const right = Math.max(...items.map((b) => b.x1));
+  for (let x = left + 2; x < right - 2; x += 2) {
+    if (items.some((b) => b.x0 < x && b.x1 > x)) continue;
+    const l = items.filter((b) => b.x1 <= x);
+    const r = items.filter((b) => b.x0 >= x);
+    if (l.length && r.length && Math.min(...r.map((b) => b.x0)) - Math.max(...l.map((b) => b.x1)) >= MIN_GUTTER) return x;
+  }
+  return null;
+}
+
 function leafSort(items: Item[]): Item[] {
   return [...items].sort((a, b) => (Math.abs(a.y0 - b.y0) < ROW_TOLERANCE ? a.x0 - b.x0 : a.y0 - b.y0));
 }
@@ -115,12 +155,18 @@ export function readingOrder(items: Item[]): Item[] {
     const zone = items.filter((b) => mid(b) >= ya && mid(b) <= yb);
     const leftCol = zone.filter((b) => (b.x0 + b.x1) / 2 < gutter.x);
     const rightCol = zone.filter((b) => (b.x0 + b.x1) / 2 >= gutter.x);
-    // En-tête d'une colonne : ce qui finit avant le premier contenu de l'autre colonne
-    // (ex. le nom en haut à droite, au-dessus d'une colonne gauche qui commence plus bas) est lu en premier.
-    // Seul le texte compte : une photo en haut d'une colonne n'empêche pas de lire le nom d'abord.
+    // En-têtes des colonnes, lus en premier. Seul le texte compte : une photo en haut d'une colonne
+    // n'empêche pas de lire le nom d'abord.
     const textTop = (col: Item[]) => Math.min(...col.filter((b) => isText(b.obj)).map((b) => b.y0));
-    const headL = leftCol.filter((b) => isText(b.obj) && b.y1 <= textTop(rightCol));
-    const headR = rightCol.filter((b) => isText(b.obj) && b.y1 <= textTop(leftCol));
+    let headL = columnHead(leftCol, textTop(rightCol));
+    let headR = columnHead(rightCol, textTop(leftCol));
+    // Ligne d'en-tête : nom en haut d'une colonne, intitulé en face (grands textes côte à côte).
+    const [tl] = textsOf(leftCol);
+    const [tr] = textsOf(rightCol);
+    if (!headL.length && !headR.length && tl && tr && tl.y0 < tr.y1 && tr.y0 < tl.y1 && fontOf(tl) >= HEAD_FONT && fontOf(tr) >= HEAD_FONT) {
+      headL = [tl];
+      headR = [tr];
+    }
     const rest = (col: Item[], head: Item[]) => col.filter((b) => !head.includes(b));
     const parts = [above, headL, headR, rest(leftCol, headL), rest(rightCol, headR), below];
     if (parts.every((p) => p.length < items.length)) return parts.flatMap(readingOrder);
@@ -140,7 +186,20 @@ export function readingOrder(items: Item[]): Item[] {
     bandBottom = Math.max(bandBottom, b.y1);
   }
   bands.push(band);
-  if (bands.length > 1) return bands.flatMap(readingOrder);
+  // Titres côte à côte (« Langues » | « Centres d'intérêt ») : chacun garde son contenu.
+  // La rangée de titres est regroupée avec les bandes suivantes qui partagent sa gouttière.
+  const titles = (g: Item[]) => g.length > 1 && g.every((b) => b.role === 'H2');
+  const groups: Item[][] = [];
+  for (let i = 0; i < bands.length; i++) {
+    let g = bands[i];
+    let j = i + 1;
+    if (titles(g))
+      while (j < bands.length && !titles(bands[j]) && splitX([...g, ...bands[j]]) !== null) g = [...g, ...bands[j++]];
+    if (j > i + 1 && g.length < items.length) i = j - 1;
+    else g = bands[i];
+    groups.push(g);
+  }
+  if (groups.length > 1) return groups.flatMap(readingOrder);
   return leafSort(items);
 }
 

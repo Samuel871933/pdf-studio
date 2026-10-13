@@ -123,6 +123,11 @@ export const CODECS: Record<string, Decoder> = {
     }
     d.skills = skillNames(names, d);
   },
+  /** Ligne « • Outils : a, b, c » seule (compétences masquées) : seuls les outils affichés sont remplacés. */
+  toolsLine: (t, d) => {
+    const m = unbullet(t).join(' ').match(/^(?:outils\s*:\s*)?(.*)$/i)!;
+    d.tools = [...m[1].split(',').map((x) => x.trim()).filter(Boolean), ...d.tools.slice(4)];
+  },
   /** Bloc « Savoir-faire : … / Outils : … / Langues : … ». */
   skillsBlock: (t, d) => {
     for (const l of lines(t)) {

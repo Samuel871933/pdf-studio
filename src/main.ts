@@ -4,15 +4,18 @@ import { Editor, PAGE, emptyMeta, type CanvasJSON } from './editor';
 import { loadFonts } from './fonts';
 import { sanitizeImage } from './images';
 import { Panel } from './panel';
-import { download, readProject, serializeProject, slug } from './project';
+import { draftEnabled, readDraft, saveDraft, type DraftResult } from './draft';
+import { openPrivacy } from './ui/privacy';
+import { download, projectText, readProject, serializeProject, slug } from './project';
 import * as S from './shapes';
-import { DEFAULT_TEMPLATE, PALETTES, TEMPLATES, type Palette } from './templates';
+import { ALL_TEMPLATES, BLANK_TEMPLATE, DEFAULT_TEMPLATE, PALETTES, type Palette } from './templates';
 import { setupBottomBar, showShortcuts } from './ui/bottombar';
 import { openGallery } from './ui/gallery';
 import { openIconPicker, type IconPick } from './ui/icon-picker';
 import { setupLayers } from './ui/layers';
-import { setupContentForm } from './ui/content-form';
+import { setupContentForm, type FormTarget } from './ui/content-form';
 import { setupSidePanel } from './ui/sidepanel';
+import { setupPanelResize } from './ui/resize';
 import { QuickFill, type FillState } from './quickfill';
 import { setupQuickBar } from './ui/quickbar';
 
@@ -40,6 +43,19 @@ const panel = new Panel($('panel'), ed, {
   replaceImage: (img) => pickImage(img),
   fillShape: (shape) => pickImage(shape),
   replaceIcon: (icon) => pickIcon(icon),
+  linked: () => {
+    const t = formTarget();
+    const label = t && form.labelFor(t);
+    if (!t || !label) return null;
+    return {
+      label,
+      section: !!t.section,
+      open: () => {
+        side.show('content');
+        form.reveal(t, true);
+      },
+    };
+  },
 });
 const bottomBar = setupBottomBar(ed);
 const qf = new QuickFill(ed);
@@ -52,11 +68,53 @@ const layers = setupLayers(ed, side.pane('layers'), side.badge('layers'), () => 
 const form = setupContentForm(side.pane('content'), qf, { chooseTemplate: () => chooseTemplate() });
 ed.onRestore = () => form.render();
 side.start();
-const quickBar = setupQuickBar(ed, stage);
+/** Section du modèle sélectionnée en entier sur la page (groupe), page liée au formulaire. */
+const pageSection = () => qf.sectionOf(ed.canvas.getActiveObjects(), !!ed.selectedGroup());
+
+/** Champ (texte seul) ou section (groupe entier) de la fiche affiché par la sélection. */
+function formTarget(): FormTarget | null {
+  if (!qf.state?.linked) return null;
+  const objs = ed.canvas.getActiveObjects();
+  if (objs.length === 1 && objs[0].tpl && objs[0].field) return { field: objs[0].field };
+  const sec = pageSection();
+  if (sec) return { section: sec.custom ? `c:${sec.custom}` : objs[0].sectionKey };
+  // Groupe sans section de la fiche (en-tête : nom, intitulé, coordonnées) : son premier champ.
+  const field = ed.selectedGroup() ? objs.find((o) => o.tpl && o.field)?.field : undefined;
+  return field ? { field } : null;
+}
+
+// Sélection sur la page : l'onglet Contenu ouvert suit, sur le champ correspondant (sans prendre le focus).
+for (const ev of ['selection:created', 'selection:updated'] as const)
+  ed.canvas.on(ev, () => {
+    const t = formTarget();
+    if (t && side.isShown('content')) form.reveal(t);
+  });
+const quickBar = setupQuickBar(ed, stage, {
+  section: pageSection,
+  hideSection: (sec) => {
+    qf.hideSections(sec);
+    toast(`« ${sec.name} » masquée : son contenu est conservé (onglet Contenu, bouton œil).`);
+  },
+});
+// Supprimer une section du modèle sur la page : elle est retirée de la fiche (sinon elle reviendrait au rendu suivant).
+ed.onRemove = () => {
+  const sec = pageSection();
+  if (!sec) return false;
+  ed.canvas.discardActiveObject();
+  qf.removeSection(sec);
+  toast(`« ${sec.name} » supprimée. Ctrl+Z pour annuler.`);
+  return true;
+};
 ed.onHelp = showShortcuts;
 ed.onAidsChange = () => panel.render();
 let autoFit = true;
 let palette: Palette = PALETTES[0];
+
+/** Brouillon automatique : résultat du dernier enregistrement (`off` tant que rien n'est enregistré). */
+let draft: DraftResult = 'off';
+/** Pas d'enregistrement avant la fin du démarrage (sinon le modèle par défaut écraserait le brouillon). */
+let draftReady = false;
+let draftTimer = 0;
 
 const undoBtn = $<HTMLButtonElement>('btn-undo');
 const redoBtn = $<HTMLButtonElement>('btn-redo');
@@ -69,6 +127,7 @@ ed.onStateChange = () => {
   bottomBar.update();
   layers.refresh();
   quickBar.update();
+  scheduleDraft();
 };
 
 const c = ed.canvas;
@@ -234,7 +293,42 @@ document.querySelector('.tools')!.addEventListener('click', (e) => {
 // ------------------------------------------------------------------ Projet
 
 const confirmDiscard = () =>
-  !ed.dirty || confirm('Les modifications non enregistrées seront perdues. Continuer ?');
+  !ed.dirty ||
+  confirm(draft === 'saved'
+    ? 'Le document en cours va être remplacé : le brouillon automatique ne garde que le dernier document. Pour le conserver, enregistrez-le d’abord (.json). Continuer ?'
+    : 'Les modifications non enregistrées seront perdues. Continuer ?');
+
+// ------------------------------------------------------------------ Brouillon automatique (un seul document)
+
+function flushDraft() {
+  clearTimeout(draftTimer);
+  if (!draftReady) return;
+  const prev = draft;
+  draft = saveDraft(projectText(ed.toJSON(), ed.meta, ed.columns, qf.state));
+  if (draft === 'full' && prev !== 'full') toast('Document trop volumineux pour le brouillon automatique (photos ?) : pensez à l’enregistrer.', true);
+}
+
+function scheduleDraft() {
+  clearTimeout(draftTimer);
+  if (draftReady) draftTimer = window.setTimeout(flushDraft, 800);
+}
+
+/** Reprend le brouillon du navigateur (validé comme un fichier ouvert). */
+async function restoreDraft(): Promise<boolean> {
+  const d = readDraft();
+  if (!d) return false;
+  try {
+    const { project } = await readProject(new File([d.project], 'brouillon.json', { type: 'application/json' }));
+    await loadDoc(project.canvas, project.meta, project.fill ?? null);
+    if (project.layout) ed.setAids({ columns: project.layout });
+    // Jamais téléchargé : remplacer ce document demande confirmation.
+    ed.dirty = true;
+    draft = 'saved';
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /** Document libre (page vierge, projet sans fiche) : pas de remplissage rapide. */
 async function loadDoc(json: CanvasJSON, meta = emptyMeta(), fill: FillState | null = null) {
@@ -248,13 +342,20 @@ async function loadDoc(json: CanvasJSON, meta = emptyMeta(), fill: FillState | n
 
 /** Modèle relié au formulaire : la fiche en cours est conservée si elle a été remplie. */
 async function loadTemplate(id: string, p: Palette) {
-  const def = TEMPLATES.find((t) => t.id === id) ?? TEMPLATES[0];
+  const def = ALL_TEMPLATES.find((t) => t.id === id) ?? ALL_TEMPLATES[0];
   palette = p;
   // Fiche déjà remplie : les propriétés modifiées à la main sont conservées, les autres suivent le contenu.
   ed.meta = qf.state?.touched ? { ...ed.meta, kind: def.kind } : emptyMeta(def.docTitle, def.kind);
   await qf.start(def, p.id);
   panel.render();
   form.render();
+}
+
+/** Nouveau document : fiche vide reliée au modèle « Vierge », la page se construit au fil du formulaire. */
+async function newDocument() {
+  qf.clear();
+  await loadTemplate(BLANK_TEMPLATE.id, palette);
+  side.show('content');
 }
 
 /** Empreinte courte d'un texte (clé de cache des miniatures). */
@@ -274,7 +375,7 @@ function chooseTemplate() {
       if ((qf.state?.linked && qf.state.touched) || confirmDiscard()) loadTemplate(def.id, p).catch(fail);
     },
     onBlank: () => {
-      if (confirmDiscard()) loadDoc({ background: '#ffffff', objects: [] }).then(() => bottomBar.openColumns()).catch(fail);
+      if (confirmDiscard()) newDocument().catch(fail);
     },
   });
 }
@@ -332,9 +433,16 @@ $('btn-open').addEventListener('click', () => {
 $('btn-save').addEventListener('click', saveProject);
 $('btn-export').addEventListener('click', () => void exportPdf());
 $('btn-new').addEventListener('click', () => {
-  if (confirmDiscard()) loadDoc({ background: '#ffffff', objects: [] }).catch(fail);
+  if (confirmDiscard()) newDocument().catch(fail);
 });
 $('btn-template').addEventListener('click', chooseTemplate);
+$('btn-privacy').addEventListener('click', () =>
+  openPrivacy({
+    full: draft === 'full',
+    // Réactivée : le document est enregistré tout de suite ; désactivée : le brouillon vient d'être effacé.
+    onChange: () => (draftEnabled() ? flushDraft() : (draft = 'off')),
+  }),
+);
 $('btn-ai').addEventListener('click', () => {
   import('./ui/ai-check').then((m) => m.openAiCheck(ed)).catch(fail);
 });
@@ -362,6 +470,12 @@ new ResizeObserver(() => {
   resizeFrame = requestAnimationFrame(() => autoFit && ed.zoomToFit());
 }).observe(stage);
 
+// Largeur des panneaux latéraux, retenue d'une visite à l'autre (préférence d'interface).
+setupPanelResize([
+  { el: $('layers'), prop: '--left-w', edge: 'right', min: 240, max: 560, def: 300, label: 'Contenu et calques' },
+  { el: document.querySelector<HTMLElement>('.side')!, prop: '--right-w', edge: 'left', min: 240, max: 480, def: 288, label: 'Propriétés' },
+]);
+
 const dialogOpen = () => !!document.querySelector('dialog[open]');
 
 window.addEventListener('keydown', (e) => {
@@ -378,15 +492,21 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
-// Rien n'est stocké : on prévient avant de fermer un document modifié.
+// Fermeture : le brouillon est enregistré tout de suite ; sans brouillon, on prévient si le document a été modifié.
+window.addEventListener('pagehide', flushDraft);
+document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && flushDraft());
 window.addEventListener('beforeunload', (e) => {
-  if (ed.dirty) e.preventDefault();
+  flushDraft();
+  if (ed.dirty && draft !== 'saved') e.preventDefault();
 });
 
 // ------------------------------------------------------------------ Démarrage
 
 (async () => {
   await loadFonts();
-  await loadTemplate(DEFAULT_TEMPLATE, palette);
+  const restored = await restoreDraft();
+  if (!restored) await loadTemplate(DEFAULT_TEMPLATE, palette);
   ed.zoomToFit();
+  draftReady = true;
+  if (restored) toast('Document en cours restauré depuis le brouillon de ce navigateur.');
 })().catch(fail);

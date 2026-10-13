@@ -69,6 +69,8 @@ button.active { background: var(--accent); border-color: var(--accent); color: v
   background: color-mix(in srgb, #1f9d55 14%, transparent); color: #1f9d55; font-size: 12px; font-weight: 600; white-space: nowrap;
 }
 .privacy svg { width: 14px; height: 14px; }
+button.privacy { height: auto; border: 0; cursor: pointer; }
+button.privacy:hover { background: color-mix(in srgb, #1f9d55 22%, transparent); }
 .group { display: flex; gap: 4px; }
 .group:first-of-type { margin-left: 8px; }
 #btn-ai { margin-left: auto; }
@@ -77,7 +79,8 @@ button.active { background: var(--accent); border-color: var(--accent); color: v
 .grid-span select { height: 32px; padding: 0 6px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); }
 
 /* ---------- Mise en page ---------- */
-.layout { flex: 1; display: grid; grid-template-columns: 76px auto 1fr 288px; min-height: 0; }
+:root { --left-w: 300px; --right-w: 288px; }
+.layout { flex: 1; display: grid; grid-template-columns: 76px auto minmax(0, 1fr) var(--right-w); min-height: 0; }
 /* Colonnes fixées : les calques repliés laissent une colonne vide (largeur nulle), rien ne se décale. */
 .tools { grid-column: 1; }
 .layers { grid-column: 2; }
@@ -129,6 +132,31 @@ button.active { background: var(--accent); border-color: var(--accent); color: v
 .cf-sec > :not(summary) { margin: 0 12px; }
 .cf-sec > :not(summary) + :not(summary) { margin-top: 10px; }
 .cf-sec.dim > summary { color: var(--muted); font-weight: 600; }
+.cf-sec > summary .cf-sum { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf-sec > summary .cf-tools { margin: -4px -6px -4px 0; }
+.cf-sec > summary .cf-tools .icon { opacity: 0; }
+.cf-sec > summary:hover .cf-tools .icon, .cf-sec > summary .cf-tools .icon:focus-visible, .cf-sec[open] > summary .cf-tools .icon { opacity: 1; }
+.cf-custom { border-style: dashed; }
+@keyframes cf-flash { 0%, 30% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent); } 100% { box-shadow: 0 0 0 3px transparent; } }
+.cf-flash { animation: cf-flash 1.4s ease-out; border-radius: 8px; }
+.cf-sec.masked { background: var(--surface-2); }
+.cf-sec.masked > summary .cf-sum { color: var(--muted); text-decoration: line-through; text-decoration-thickness: 1px; }
+.cf-badge { flex: none; font-size: 10.5px; font-weight: 600; color: var(--muted); padding: 1px 6px; border: 1px solid var(--border); border-radius: 999px; }
+.cf-sec.masked > summary .cf-tools .icon { opacity: 1; }
+.cf-custom.dragging { opacity: .45; }
+.cf-drop { height: 3px; margin: -6px 4px; border-radius: 2px; background: var(--accent); pointer-events: none; }
+.cf-grip { display: inline-flex; margin: -4px -2px -4px -6px; padding: 4px 2px; color: var(--muted); cursor: grab; border-radius: 4px; }
+.cf-grip:focus-visible { outline: 2px solid var(--accent); }
+.cf-fields:disabled .cf-grip { cursor: default; }
+.cf-where { margin-top: 0 !important; color: #8a5a12; }
+.cf-addsec { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 2px 0 4px; }
+.cf-addsec > .cf-hint { margin: 0 2px; line-height: 1.4; }
+.cf-kinds { display: flex; flex-direction: column; gap: 6px; align-self: stretch; }
+.cf-kinds[hidden] { display: none; }
+.cf-kind { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; min-width: 0; box-sizing: border-box; white-space: normal; height: auto; padding: 8px 10px; text-align: left; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.cf-kind strong { font-size: 13px; }
+.cf-kind span { font-size: 11.5px; color: var(--muted); line-height: 1.35; }
+.cf-kind:hover { border-color: var(--accent); }
 .cf-others { display: flex; flex-direction: column; gap: 8px; }
 .cf-others > summary { padding: 6px 2px; color: var(--muted); }
 .cf-others > .hint { margin: 0 2px 4px; color: var(--muted); }
@@ -159,8 +187,18 @@ button.active { background: var(--accent); border-color: var(--accent); color: v
 .cf-empty p { margin: 0; }
 
 /* ---------- Calques ---------- */
-.layers { width: 300px; display: flex; flex-direction: column; min-height: 0; background: var(--surface); border-right: 1px solid var(--border); }
+.layers { width: var(--left-w); position: relative; display: flex; flex-direction: column; min-height: 0; background: var(--surface); border-right: 1px solid var(--border); }
 .layers[hidden] { display: none; }
+
+/* Poignées de redimensionnement des panneaux (bord intérieur). */
+.resize-handle { position: absolute; top: 0; bottom: 0; width: 9px; z-index: 5; cursor: col-resize; touch-action: none; }
+.resize-handle.right { right: -7px; }
+.resize-handle.left { left: -7px; }
+.resize-handle::after { content: ''; position: absolute; top: 0; bottom: 0; left: 3px; width: 3px; border-radius: 2px; background: transparent; transition: background .12s; }
+.resize-handle:hover::after, .resize-handle:focus-visible::after, body.resizing .resize-handle::after { background: var(--accent); }
+.resize-handle:focus-visible { outline: none; }
+body.resizing { cursor: col-resize; user-select: none; }
+body.resizing .stage, body.resizing canvas { pointer-events: none; }
 .layers-head { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 14px; border-bottom: 1px solid var(--border); flex: none; }
 .layers-head strong { font-size: 13px; }
 .layers-head svg { color: var(--muted); }
@@ -212,7 +250,7 @@ button.active { background: var(--accent); border-color: var(--accent); color: v
 .page-wrap { margin: 0 auto auto; flex: none; box-shadow: var(--page-shadow); background: #fff; line-height: 0; cursor: default; }
 
 /* ---------- Colonne de droite : propriétés + colonnage ---------- */
-.side { display: flex; flex-direction: column; min-height: 0; background: var(--surface); border-left: 1px solid var(--border); }
+.side { position: relative; display: flex; flex-direction: column; min-height: 0; background: var(--surface); border-left: 1px solid var(--border); }
 
 /* Propriétés : une section par intertitre, espacements réguliers (gap) */
 .panel { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
@@ -397,6 +435,7 @@ button.tog[aria-pressed=true] { background: color-mix(in srgb, var(--accent) 14%
   .layers { position: fixed; left: 8px; right: 8px; bottom: 56px; width: auto; max-height: 45vh; z-index: 25; border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 12px 40px rgb(0 0 0 / .2); }
   .stage { padding: 16px; }
   .side { border-left: 0; border-top: 1px solid var(--border); }
+  .resize-handle { display: none; }
   .dock { max-height: 50%; }
   .bottombar span:not(.bb-info), .bb-info { display: none; }
   .col-presets { grid-template-columns: repeat(2, 1fr); }

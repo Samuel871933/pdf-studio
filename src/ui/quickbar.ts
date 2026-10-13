@@ -1,13 +1,20 @@
-// Barre d'actions flottante au-dessus de la sélection : verrouiller, dupliquer, plans, supprimer.
+// Barre d'actions flottante au-dessus de la sélection : verrouiller, dupliquer, plans, masquer, supprimer.
 // Elle suit l'élément (zoom, défilement) et se cache pendant les déplacements et redimensionnements.
 import { ActiveSelection } from 'fabric';
 import type { Editor } from '../editor';
+import type { PageSection } from '../quickfill';
 import { h } from './dom';
 import { uiIcon, type UiIcon } from './icons';
 
 const GAP = 10;
 
-export function setupQuickBar(ed: Editor, stage: HTMLElement) {
+export interface QuickBarActions {
+  /** Section du modèle sélectionnée en entier (masquée dans la fiche plutôt que sur la page). */
+  section(): PageSection | null;
+  hideSection(sec: PageSection): void;
+}
+
+export function setupQuickBar(ed: Editor, stage: HTMLElement, actions: QuickBarActions) {
   const c = ed.canvas;
   const bar = h('div', { class: 'quickbar', role: 'toolbar', ariaLabel: 'Actions sur la sélection', hidden: true });
   document.body.append(bar);
@@ -27,8 +34,17 @@ export function setupQuickBar(ed: Editor, stage: HTMLElement) {
     btn('duplicate', 'Dupliquer (Ctrl+D)', () => void ed.duplicate()),
     btn('front', 'Premier plan', () => ed.arrange('front')),
     btn('back', 'Arrière-plan', () => ed.arrange('back')),
-    btn('trash', 'Supprimer (Suppr)', () => ed.removeSelection(), 'danger'),
   ];
+  // Masquer : une section du modèle dans la fiche ; un élément libre sur la page (réaffichable dans les calques).
+  const hideBtn = btn('eyeOff', 'Masquer', () => {
+    const sec = actions.section();
+    if (sec) return actions.hideSection(sec);
+    const objs = c.getActiveObjects();
+    c.discardActiveObject();
+    for (const o of objs) ed.setVisible(o, false);
+  });
+  const trashBtn = btn('trash', 'Supprimer (Suppr)', () => ed.removeSelection(), 'danger');
+  others.push(hideBtn, trashBtn);
   const groupBtn = btn('group', 'Grouper (Ctrl+G)', () => (ed.selectedGroup() ? ed.ungroup() : ed.group()));
   bar.append(lockBtn, groupBtn, h('span', { class: 'qb-sep' }), ...others);
 
@@ -57,6 +73,18 @@ export function setupQuickBar(ed: Editor, stage: HTMLElement) {
     groupBtn.hidden = !(isGroup || objs.length > 1);
     groupBtn.replaceChildren(uiIcon(isGroup ? 'ungroup' : 'group', 17));
     groupBtn.title = groupBtn.ariaLabel = isGroup ? 'Dégrouper (Ctrl+Maj+G)' : 'Grouper (Ctrl+G)';
+
+    // Section du modèle : masquée / supprimée dans la fiche. Partie d'une section (page liée) : elle serait
+    // recréée au prochain rendu, on invite à sélectionner la section entière.
+    const sec = actions.section();
+    const partial = !sec && !!ed.fill && (ed.fill as { linked?: boolean }).linked && objs.some((o) => o.tpl);
+    hideBtn.disabled = partial || !!sec?.custom;
+    hideBtn.title = hideBtn.ariaLabel = sec?.custom
+      ? 'Section ajoutée : supprimez-la ou videz-la dans l’onglet Contenu'
+      : sec ? `Masquer la section « ${sec.name} » (contenu conservé)`
+      : partial ? 'Pour masquer, sélectionnez la section entière (clic simple) ou détachez la page'
+      : 'Masquer (réaffichable dans les calques)';
+    trashBtn.title = trashBtn.ariaLabel = sec ? `Supprimer la section « ${sec.name} » (Suppr)` : 'Supprimer (Suppr)';
 
     // Position écran de la sélection (repère de la page × zoom + position du canevas).
     a.setCoords();

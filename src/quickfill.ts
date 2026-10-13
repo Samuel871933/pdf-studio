@@ -6,9 +6,9 @@
 import { FabricImage, type FabricObject, type Textbox } from 'fabric';
 import { META_KEYS, type DocMeta, type Editor, type MetaKey } from './editor';
 import { isText } from './shapes';
-import { clonePersona, filled, type Persona } from './templates/content';
+import { clonePersona, CONTENT_KEYS, filled, visiblePersona, type ContentKey, type Persona } from './templates/content';
 import { decodeField } from './templates/fields';
-import { buildFit, PALETTES, TEMPLATES, type Overflow, type TemplateDef } from './templates';
+import { ALL_TEMPLATES, buildFit, PALETTES, type Overflow, type TemplateDef } from './templates';
 
 export interface FillState {
   template: string;
@@ -18,6 +18,24 @@ export interface FillState {
   linked: boolean;
   /** La fiche a été modifiée (sinon, changer de modèle reprend ses données d'exemple). */
   touched: boolean;
+}
+
+/** Textes qui affichent plusieurs sections à la fois (leur codec relit chacune). */
+const CODEC_KEYS: Record<string, ContentKey[]> = {
+  skillsBlock: ['skills', 'tools', 'languages'],
+  skillsTools: ['skills', 'tools'],
+  langInterests: ['languages', 'interests'],
+};
+
+const isContentKey = (k: unknown): k is ContentKey => (CONTENT_KEYS as unknown[]).includes(k);
+
+/** Section(s) de la fiche affichée(s) par une sélection de la page. */
+export interface PageSection {
+  name: string;
+  /** Sections standards (une section regroupe parfois plusieurs parties : « Compétences » avec outils et langues). */
+  keys: ContentKey[];
+  /** Identifiant d'une section ajoutée. */
+  custom?: string;
 }
 
 export class QuickFill {
@@ -62,7 +80,7 @@ export class QuickFill {
   }
 
   get def(): TemplateDef | undefined {
-    return TEMPLATES.find((t) => t.id === this.state?.template);
+    return ALL_TEMPLATES.find((t) => t.id === this.state?.template);
   }
 
   /** Charge un modèle : avec la fiche en cours si elle a été remplie, sinon ses données d'exemple. */
@@ -94,6 +112,42 @@ export class QuickFill {
   schedule(delay = 280) {
     clearTimeout(this.timer);
     this.timer = window.setTimeout(() => void this.render(false), delay);
+  }
+
+  /**
+   * Section du modèle sélectionnée en entier sur la page (son groupe de calques), page liée au formulaire.
+   * `null` pour un élément seul, un élément ajouté à la main ou une page détachée.
+   */
+  sectionOf(objs: FabricObject[], wholeGroup: boolean): PageSection | null {
+    if (!this.state?.linked || !wholeGroup || !objs.length) return null;
+    const key = objs[0].sectionKey;
+    if (!key || objs.some((o) => !o.tpl || o.sectionKey !== key)) return null;
+    const name = objs[0].groupName ?? 'Section';
+    if (key.startsWith('c:')) return { name, keys: [], custom: key.slice(2) };
+    if (!isContentKey(key)) return null;
+    const keys = new Set<ContentKey>([key]);
+    for (const o of objs) {
+      const head = o.field?.split('.')[0];
+      if (isContentKey(head)) keys.add(head);
+      for (const k of CODEC_KEYS[o.codec ?? ''] ?? []) keys.add(k);
+    }
+    return { name, keys: [...keys] };
+  }
+
+  /** Masque des sections : absentes de la page, contenu conservé. */
+  hideSections(sec: PageSection) {
+    if (sec.custom) return;
+    this.update((d) => (d.hidden = [...new Set([...(d.hidden ?? []), ...sec.keys])]), 0);
+    this.onExternalChange();
+  }
+
+  /** Supprime une section : son contenu est vidé (section ajoutée : retirée de la fiche). */
+  removeSection(sec: PageSection) {
+    this.update((d) => {
+      if (sec.custom) d.custom = d.custom?.filter((c) => c.id !== sec.custom);
+      else for (const k of sec.keys) clearSection(d, k);
+    }, 0);
+    this.onExternalChange();
   }
 
   /** Arrête le lien : la page reste telle quelle et se modifie librement. */
@@ -159,7 +213,7 @@ export class QuickFill {
     const s = this.state;
     const def = this.def;
     if (!s || !def) return null;
-    return autoMeta(s.data, def.kind);
+    return autoMeta(visiblePersona(s.data), def.kind);
   }
 
   /** Remplit les propriétés que l'utilisateur n'a pas modifiées à la main. */
@@ -190,6 +244,14 @@ export class QuickFill {
     // Après la sortie d'édition de Fabric : la page se recompose (textes plus longs, nouvelles lignes…).
     this.schedule(0);
   }
+}
+
+/** Vide une section standard (et la réaffiche : vide, elle n'apparaît plus sur la page). */
+export function clearSection(d: Persona, k: ContentKey) {
+  if (k === 'profile') d.profile = '';
+  else d[k] = [];
+  d.hidden = d.hidden?.filter((x) => x !== k);
+  if (!d.hidden?.length) delete d.hidden;
 }
 
 /** Texte raccourci au mot près (résumé, titre). */

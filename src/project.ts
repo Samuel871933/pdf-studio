@@ -1,11 +1,11 @@
-// Sauvegarde / ouverture de projet. Rien n'est stocké par l'application : l'utilisateur
-// télécharge son projet en .json et le rouvre quand il le souhaite. Le fichier ouvert
-// est traité comme non fiable : seules les propriétés et types connus sont conservés.
+// Sauvegarde / ouverture de projet : l'utilisateur télécharge son projet en .json et le rouvre quand
+// il le souhaite (le brouillon automatique du navigateur utilise le même format, voir draft.ts).
+// Le fichier ouvert est traité comme non fiable : seules les propriétés et types connus sont conservés.
 import { DEFAULT_FONT, isFontFamily } from './fonts';
 import { META_KEYS, type CanvasJSON, type DocMeta } from './editor';
 import { sanitizeLayout, type ColumnLayout } from './layout';
 import type { FillState } from './quickfill';
-import { PALETTES, TEMPLATES } from './templates';
+import { ALL_TEMPLATES, PALETTES } from './templates';
 import { sanitizePersona } from './templates/content';
 
 const APP = 'pdf-studio';
@@ -29,9 +29,13 @@ export interface ProjectFile {
   fill?: FillState | null;
 }
 
-export function serializeProject(canvas: CanvasJSON, meta: DocMeta, layout: ColumnLayout, fill: FillState | null = null): Blob {
+export function projectText(canvas: CanvasJSON, meta: DocMeta, layout: ColumnLayout, fill: FillState | null = null): string {
   const file: ProjectFile = { app: APP, format: FORMAT, meta, canvas, layout, fill };
-  return new Blob([JSON.stringify(file)], { type: 'application/json' });
+  return JSON.stringify(file);
+}
+
+export function serializeProject(canvas: CanvasJSON, meta: DocMeta, layout: ColumnLayout, fill: FillState | null = null): Blob {
+  return new Blob([projectText(canvas, meta, layout, fill)], { type: 'application/json' });
 }
 
 type Obj = Record<string, unknown>;
@@ -58,6 +62,8 @@ function cleanObject(o: unknown, depth = 0): Obj | null {
   if (typeof o.field !== 'string' || !/^[a-z0-9.]{1,60}$/i.test(o.field)) delete out.field;
   if (typeof o.codec !== 'string' || !/^[a-z]{1,30}$/i.test(o.codec)) delete out.codec;
   out.tpl = o.tpl === true;
+  if (![0, 1, 2, 3].includes(o.heading as number)) delete out.heading;
+  if (typeof o.sectionKey !== 'string' || !/^(c:)?[a-z0-9]{1,30}$/i.test(o.sectionKey)) delete out.sectionKey;
   // Groupe logique : identifiant et nom courts, en texte simple.
   if (typeof o.groupId === 'string' && /^[a-z0-9]{1,40}$/i.test(o.groupId)) out.groupName = cleanText(o.groupName, 60) || 'Groupe';
   else {
@@ -97,7 +103,7 @@ function cleanObject(o: unknown, depth = 0): Obj | null {
 /** Remplissage rapide d'un fichier ouvert : modèle et palette connus, fiche validée champ par champ. */
 function cleanFill(v: unknown): FillState | null {
   if (!isObj(v)) return null;
-  const template = TEMPLATES.find((t) => t.id === v.template)?.id;
+  const template = ALL_TEMPLATES.find((t) => t.id === v.template)?.id;
   const data = sanitizePersona(v.data);
   if (!template || !data) return null;
   const palette = PALETTES.find((p) => p.id === v.palette)?.id ?? PALETTES[0].id;

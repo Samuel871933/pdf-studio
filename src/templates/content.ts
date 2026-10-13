@@ -35,6 +35,38 @@ export interface LetterData {
   closing: string;
 }
 
+/** Sections de la fiche qu'on peut renommer, dupliquer et après lesquelles placer une section ajoutée. */
+export type ContentKey = 'profile' | 'experience' | 'education' | 'achievements' | 'skills' | 'tools' | 'languages' | 'interests';
+export const CONTENT_KEYS: ContentKey[] = ['profile', 'experience', 'education', 'achievements', 'skills', 'tools', 'languages', 'interests'];
+
+/** Forme d'une section ajoutée : postes / diplômes, liste à puces ou paragraphe. */
+export type CustomKind = 'entries' | 'list' | 'text';
+
+/** Section ajoutée par l'utilisateur (« Bénévolat », « Certifications »…), mise en page par le modèle. */
+export interface CustomSection {
+  /** Identifiant stable (ne change pas quand on réordonne). */
+  id: string;
+  title: string;
+  kind: CustomKind;
+  /** Section après laquelle elle s'affiche : elle en prend la colonne et le style. */
+  after: ContentKey;
+  entries: Entry[];
+  items: string[];
+  text: string;
+}
+
+/** Forme de section créée en dupliquant chaque section standard. */
+export const KIND_OF: Record<ContentKey, CustomKind> = {
+  profile: 'text', experience: 'entries', education: 'entries', achievements: 'list',
+  skills: 'list', tools: 'list', languages: 'list', interests: 'list',
+};
+
+export const newCustomId = () => `c${Date.now().toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`;
+
+/** Une section ajoutée n'est affichée que si elle a du contenu. */
+export const hasContent = (c: CustomSection) =>
+  c.kind === 'text' ? !!c.text.trim() : c.kind === 'list' ? filled(c.items).length > 0 : c.entries.some((e) => e.title.trim() || e.org.trim());
+
 export interface Persona {
   name: string;
   title: string;
@@ -56,6 +88,35 @@ export interface Persona {
   languages: Language[];
   interests: string[];
   letter: LetterData;
+  /** Titres renommés des sections standards (sinon, le titre propre au modèle). */
+  labels?: Partial<Record<ContentKey, string>>;
+  /** Sections ajoutées, dans leur ordre d'affichage. */
+  custom?: CustomSection[];
+  /** Sections standards masquées : absentes de la page, leur contenu est conservé. */
+  hidden?: ContentKey[];
+}
+
+/** La section n'a rien à afficher (un modèle n'affiche ni son titre ni son contenu). */
+export function isEmptySection(p: Persona, key: ContentKey): boolean {
+  switch (key) {
+    case 'profile': return !p.profile.trim();
+    case 'experience':
+    case 'education': return !p[key].some((e) => e.title.trim() || e.org.trim());
+    case 'skills': return !filled(p.skills.map((s) => s.name)).length;
+    case 'languages': return !p.languages.some((l) => l.name.trim());
+    default: return !filled(p[key]).length;
+  }
+}
+
+/** Fiche telle que la page l'affiche : sections masquées vidées (copie ; la fiche garde leur contenu). */
+export function visiblePersona(p: Persona): Persona {
+  if (!p.hidden?.length) return p;
+  const v: Persona = { ...p };
+  for (const k of p.hidden) {
+    if (k === 'profile') v.profile = '';
+    else v[k] = [];
+  }
+  return v;
 }
 
 /** Éléments renseignés d'une liste (un élément tout juste ajouté, encore vide, n'est pas affiché). */
@@ -312,6 +373,13 @@ export const LETTER_SAMPLE: Persona = {
   address: '12 rue de l’Exemple\n33000 Ville',
 };
 
+/** Fiche vide (modèle « Vierge » : la page se construit au fil de la saisie). */
+export const EMPTY: Persona = {
+  name: '', title: '', phone: '', email: '', city: '', address: '', linkedin: '', github: '', profile: '',
+  experience: [], education: [], achievements: [], skills: [], tools: [], languages: [], interests: [],
+  letter: { recipient: '', subject: '', greeting: '', paragraphs: [], closing: '' },
+};
+
 export const clonePersona = (p: Persona): Persona => structuredClone(p);
 
 // ------------------------------------------------------------------ Validation (projets ouverts)
@@ -334,6 +402,21 @@ function entry(v: unknown): Entry | null {
   const bullets = list(v.bullets, 30, (b) => (typeof b === 'string' ? b.slice(0, 500) : null));
   if (bullets.length) e.bullets = bullets;
   return e;
+}
+
+const KINDS: CustomKind[] = ['entries', 'list', 'text'];
+
+function custom(v: unknown): CustomSection | null {
+  if (!isObj(v) || !KINDS.includes(v.kind as CustomKind)) return null;
+  return {
+    id: typeof v.id === 'string' && /^[a-z0-9]{1,24}$/i.test(v.id) ? v.id : newCustomId(),
+    title: str(v.title, 80),
+    kind: v.kind as CustomKind,
+    after: CONTENT_KEYS.includes(v.after as ContentKey) ? (v.after as ContentKey) : 'education',
+    entries: list(v.entries, 30, entry),
+    items: list(v.items, 40, (x) => (typeof x === 'string' ? x.slice(0, 500) : null)),
+    text: str(v.text, 3000),
+  };
 }
 
 /** Fiche issue d'un fichier ouvert : seuls les champs attendus, en texte, de taille bornée. */
@@ -361,6 +444,11 @@ export function sanitizePersona(v: unknown): Persona | null {
       isObj(l) ? { name: str(l.name, 100), level: str(l.level, 60), detail: str(l.detail, 200) || undefined, score: level(l.score) } : null,
     ),
     interests: list(v.interests, 30, text),
+    labels: isObj(v.labels)
+      ? Object.fromEntries(CONTENT_KEYS.filter((k) => typeof (v.labels as Obj)[k] === 'string' && str((v.labels as Obj)[k], 80).trim()).map((k) => [k, str((v.labels as Obj)[k], 80)]))
+      : undefined,
+    custom: list(v.custom, 20, custom),
+    hidden: Array.isArray(v.hidden) ? CONTENT_KEYS.filter((k) => (v.hidden as unknown[]).includes(k)) : undefined,
     letter: {
       recipient: str(letter.recipient, 1000),
       subject: str(letter.subject, 500),

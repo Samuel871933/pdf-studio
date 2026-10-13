@@ -58,6 +58,11 @@ export interface PanelActions {
   /** Remplace la forme par une image découpée à sa forme. */
   fillShape(shape: FabricObject): void;
   replaceIcon(icon: Path): void;
+  /**
+   * Sélection reliée à la fiche (un texte et son champ, ou une section entière) : libellé du champ
+   * et ouverture dans l'onglet Contenu. `null` hors remplissage rapide lié.
+   */
+  linked(): { label: string; section: boolean; open(): void } | null;
 }
 
 export class Panel {
@@ -448,7 +453,7 @@ export class Panel {
       h('p', { class: 'hint' }, 'Glissez-déposez ou collez une image directement sur la page.'),
       h('p', { class: 'hint' }, 'Raccourcis clavier : touche ', h('kbd', {}, '?'), ' ou bouton ? en bas à droite.'),
       h('h2', {}, 'Confidentialité'),
-      h('p', { class: 'hint' }, 'Tout est traité dans votre navigateur : aucun envoi, aucun cookie, aucun stockage. Fermer la page efface tout — pensez à enregistrer votre projet.'),
+      h('p', { class: 'hint' }, 'Tout est traité dans votre navigateur : aucun envoi, aucun cookie. Le document en cours est gardé en brouillon sur cet appareil (un seul, réglable via « 100 % local ») : pour le conserver durablement, enregistrez votre projet.'),
     ];
     queueMicrotask(() => this.refresh());
     return nodes.filter((n): n is Exclude<typeof n, false> => n !== false);
@@ -466,6 +471,17 @@ export class Panel {
     const groupId = ed.selectedGroup();
     const title = groupId ? `Groupe « ${ed.groupMembers(groupId)[0].groupName ?? 'Groupe'} »` : label(a);
     const nodes: Child[] = [h('h2', { class: 'title' }, title + (locked ? ' 🔒' : ''))];
+
+    // Raccourci vers le formulaire : ce texte (ou cette section) vient de la fiche.
+    const link = this.actions.linked();
+    if (link)
+      nodes.push(
+        h('h2', {}, 'Contenu de la fiche'),
+        h('p', { class: 'hint' }, link.section
+          ? `Section « ${link.label} » de la fiche : son contenu se modifie dans le formulaire.`
+          : `Ce texte affiche « ${link.label} » de la fiche : modifié dans le formulaire, il se met à jour sur la page (et dans les autres modèles).`),
+        this.button(link.section ? 'Ouvrir dans le formulaire' : 'Modifier dans le formulaire', 'Ouvre l’onglet Contenu sur ce champ', () => link.open(), 'primary', 'edit'),
+      );
 
     // Position & taille
     const textbox = !isSel && isText(a);

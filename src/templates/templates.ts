@@ -13,7 +13,7 @@ import {
   mdiPhoneOutline,
   mdiRun,
 } from '@mdi/js';
-import { cityName, filled, languagesText, type Persona } from './content';
+import { cityName, filled, hasContent, languagesText, type ContentKey, type Entry, type Persona } from './content';
 import { Builder, H, mix, W, type Palette } from './kit';
 
 /** Coordonnées avec icônes (les champs vides sont omis). */
@@ -45,30 +45,43 @@ export function classic(P: Palette, p: Persona, density = 1) {
   y += b.g(14);
 
   b.flow();
-  b.group('Profil');
-  y = b.heading('Profil', M, y, w);
-  y = b.para(p.profile, M, y, w, { field: 'profile' }, 14);
-  b.group('Expérience professionnelle');
-  y = b.heading('Expérience professionnelle', M, y, w);
-  p.experience.forEach((e, i) => (y = b.entry(e, M, y, w, { path: `experience.${i}` })));
-  y += b.g(5);
-  b.group('Formation');
-  y = b.heading('Formation', M, y, w);
-  p.education.forEach((e, i) => (y = b.entry(e, M, y, w, { gap: 6, path: `education.${i}` })));
-  y += b.g(8);
-  b.group('Compétences');
-  y = b.heading('Compétences', M, y, w);
+  const extra = { x: M, w, heading: (t: string, yy: number) => b.heading(t, M, yy, w), gap: 14 };
+  if (b.has('profile')) {
+    y = b.heading(b.section('profile', 'Profil'), M, y, w);
+    y = b.para(p.profile, M, y, w, { field: 'profile' }, 14);
+  }
+  y = b.customs('profile', y, extra);
+  if (b.has('experience')) {
+    y = b.heading(b.section('experience', 'Expérience professionnelle'), M, y, w);
+    p.experience.forEach((e, i) => (y = b.entry(e, M, y, w, { path: `experience.${i}` })));
+    y += b.g(5);
+  }
+  y = b.customs('experience', y, extra);
+  y = b.customs('achievements', y, extra);
+  if (b.has('education')) {
+    y = b.heading(b.section('education', 'Formation'), M, y, w);
+    p.education.forEach((e, i) => (y = b.entry(e, M, y, w, { gap: 6, path: `education.${i}` })));
+    y += b.g(8);
+  }
+  y = b.customs('education', y, extra);
   const rows = [
     filled(p.skills.map((s) => s.name)).length && `Savoir-faire : ${filled(p.skills.map((s) => s.name)).join(', ')}`,
     filled(p.tools).length && `Outils : ${filled(p.tools).join(', ')}`,
     p.languages.some((l) => l.name.trim()) && `Langues : ${languagesText(p)}`,
   ].filter(Boolean);
-  const skills = b.text(rows.join('\n'), M, y, w, { lineHeight: 1.5, field: 'skills', codec: 'skillsBlock' });
-  b.boldPrefix(skills, ' :');
-  y += skills.height + b.g(14);
-  b.group('Centres d’intérêt');
-  y = b.heading('Centres d’intérêt', M, y, w);
-  y = b.para(filled(p.interests).join('  ·  '), M, y, w, { field: 'interests', codec: 'list' });
+  // Une ligne par partie affichée : le codec ne relit que les lignes présentes (une section masquée reste intacte).
+  if (rows.length) {
+    y = b.heading(b.section('skills', 'Compétences'), M, y, w);
+    const skills = b.text(rows.join('\n'), M, y, w, { lineHeight: 1.5, field: 'skills', codec: 'skillsBlock' });
+    b.boldPrefix(skills, ' :');
+    y += skills.height + b.g(14);
+  }
+  for (const k of ['skills', 'tools', 'languages'] as const) y = b.customs(k, y, extra);
+  if (b.has('interests')) {
+    y = b.heading(b.section('interests', 'Centres d’intérêt'), M, y, w);
+    y = b.para(filled(p.interests).join('  ·  '), M, y, w, { field: 'interests', codec: 'list' });
+  }
+  y = b.customs('interests', y, { ...extra, lead: 14, gap: 0 });
   b.spread(y, H - 50);
   return b.json();
 }
@@ -89,14 +102,16 @@ export function hybrid(P: Palette, p: Persona, density = 1) {
   y += b.g(18);
 
   b.flow();
-  b.group('Profil');
-  y = b.heading('Profil', M, y, w, 'bar');
-  y = b.para(p.profile, M, y, w, { field: 'profile' }, 14);
+  const extra = { x: M, w, heading: (t: string, yy: number) => b.heading(t, M, yy, w, 'bar'), gap: 14 };
+  if (b.has('profile')) {
+    y = b.heading(b.section('profile', 'Profil'), M, y, w, 'bar');
+    y = b.para(p.profile, M, y, w, { field: 'profile' }, 14);
+  }
+  y = b.customs('profile', y, extra);
 
   // Compétences réparties sur trois colonnes (chaque compétence reste reliée à sa ligne de la fiche).
   if (filled(p.skills.map((s) => s.name)).length) {
-    b.group('Compétences clés');
-    y = b.heading('Compétences clés', M, y, w, 'bar');
+    y = b.heading(b.section('skills', 'Compétences clés'), M, y, w, 'bar');
     const colW = (w - 2 * 16) / 3;
     const per = Math.ceil(p.skills.length / 3);
     let maxY = y;
@@ -110,21 +125,36 @@ export function hybrid(P: Palette, p: Persona, density = 1) {
     }
     y = maxY + b.g(14);
   }
+  y = b.customs('skills', y, extra);
 
-  b.group('Réalisations marquantes');
-  y = b.heading('Réalisations marquantes', M, y, w, 'bar');
-  y = b.bullets(p.achievements, M, y, w, { field: 'achievements' }, 14);
-  b.group('Expérience professionnelle');
-  y = b.heading('Expérience professionnelle', M, y, w, 'bar');
-  p.experience.forEach((e, i) => (y = b.entry(e, M, y, w, { path: `experience.${i}` })));
-  y += b.g(5);
-  b.group('Formation');
-  y = b.heading('Formation', M, y, w, 'bar');
-  p.education.forEach((e, i) => (y = b.entry(e, M, y, w, { gap: 6, path: `education.${i}` })));
-  y += b.g(8);
-  b.group('Langues et intérêts');
-  y = b.heading('Langues et intérêts', M, y, w, 'bar');
-  y = b.para(`${languagesText(p)}\n${filled(p.interests).join('  ·  ')}`, M, y, w, { lineHeight: 1.5, field: 'languages', codec: 'langInterests' });
+  if (b.has('achievements')) {
+    y = b.heading(b.section('achievements', 'Réalisations marquantes'), M, y, w, 'bar');
+    y = b.bullets(p.achievements, M, y, w, { field: 'achievements' }, 14);
+  }
+  y = b.customs('achievements', y, extra);
+  if (b.has('experience')) {
+    y = b.heading(b.section('experience', 'Expérience professionnelle'), M, y, w, 'bar');
+    p.experience.forEach((e, i) => (y = b.entry(e, M, y, w, { path: `experience.${i}` })));
+    y += b.g(5);
+  }
+  y = b.customs('experience', y, extra);
+  if (b.has('education')) {
+    y = b.heading(b.section('education', 'Formation'), M, y, w, 'bar');
+    p.education.forEach((e, i) => (y = b.entry(e, M, y, w, { gap: 6, path: `education.${i}` })));
+    y += b.g(8);
+  }
+  y = b.customs('education', y, extra);
+  // Langues et intérêts sur deux lignes d'un même texte ; une seule partie affichée : son propre champ
+  // (sinon modifier la ligne effacerait la section masquée).
+  const langs = b.has('languages');
+  const fun = b.has('interests');
+  if (langs || fun) {
+    y = b.heading(langs ? b.section('languages', fun ? 'Langues et intérêts' : 'Langues') : b.section('interests', 'Centres d’intérêt'), M, y, w, 'bar');
+    if (langs && fun) y = b.para(`${languagesText(p)}\n${filled(p.interests).join('  ·  ')}`, M, y, w, { lineHeight: 1.5, field: 'languages', codec: 'langInterests' });
+    else if (langs) y = b.para(languagesText(p), M, y, w, { lineHeight: 1.5, field: 'languages', codec: 'languages' });
+    else y = b.para(filled(p.interests).join('  ·  '), M, y, w, { lineHeight: 1.5, field: 'interests', codec: 'list' });
+  }
+  for (const k of ['languages', 'interests'] as const) y = b.customs(k, y, { ...extra, lead: 14, gap: 0 });
   b.spread(y, H - 50);
   return b.json();
 }
@@ -150,32 +180,49 @@ export function timeline(P: Palette, p: Persona, density = 1) {
   const cw = w - dateW;
   // Titre de section sur sa propre ligne, contenu décalé, dates dans la colonne de gauche.
   b.flow();
-  const section = (title: string) => {
-    b.group(title);
+  const heading = (title: string) => {
     b.mark();
-    const t = b.text(title.toUpperCase(), M, y, w, { fontFamily: 'Montserrat', fontWeight: 'bold', fontSize: 9, fill: P.secondary });
+    const t = b.text(title.toUpperCase(), M, y, w, { fontFamily: 'Montserrat', fontWeight: 'bold', fontSize: 9, fill: P.secondary, heading: 2 });
     y += t.height + b.g(7);
   };
-  section('Profil');
-  y = b.para(p.profile, cx, y, cw, { field: 'profile' }, 16);
-  section('Expérience professionnelle');
-  p.experience.forEach((e, i) => (y = b.entryDated(e, M, y, dateW, w, 9, `experience.${i}`)));
-  y += b.g(6);
-  section('Formation');
-  p.education.forEach((e, i) => (y = b.entryDated(e, M, y, dateW, w, 6, `education.${i}`)));
-  y += b.g(10);
-  section('Compétences');
-  y = b.bullets(filled(p.skills.map((s) => s.name)), cx, y, cw, { field: 'skills', codec: 'skillNames' }, 16);
-  const rows: [string, string, string, string][] = [
-    ['Outils', filled(p.tools).join('  ·  '), 'tools', 'list'],
-    ['Langues', languagesText(p), 'languages', 'languages'],
-    ['Intérêts', filled(p.interests).join('  ·  '), 'interests', 'list'],
+  const section = (key: ContentKey, fallback: string) => heading(b.section(key, fallback));
+  const extra = {
+    x: cx, w: cw, gap: 12,
+    heading: (t: string, yy: number) => ((y = yy), heading(t), y),
+    entry: (e: Entry, yy: number, path: string) => b.entryDated(e, M, yy, dateW, w, 9, path),
+  };
+  if (b.has('profile')) {
+    section('profile', 'Profil');
+    y = b.para(p.profile, cx, y, cw, { field: 'profile' }, 16);
+  }
+  y = b.customs('profile', y, extra);
+  if (b.has('experience')) {
+    section('experience', 'Expérience professionnelle');
+    p.experience.forEach((e, i) => (y = b.entryDated(e, M, y, dateW, w, 9, `experience.${i}`)));
+    y += b.g(6);
+  }
+  y = b.customs('experience', y, extra);
+  y = b.customs('achievements', y, extra);
+  if (b.has('education')) {
+    section('education', 'Formation');
+    p.education.forEach((e, i) => (y = b.entryDated(e, M, y, dateW, w, 6, `education.${i}`)));
+    y += b.g(10);
+  }
+  y = b.customs('education', y, extra);
+  // Les lignes Outils / Langues / Intérêts sont rangées sous « Compétences ».
+  if (['skills', 'tools', 'languages', 'interests'].some((k) => b.has(k as ContentKey))) section('skills', 'Compétences');
+  if (b.has('skills')) y = b.bullets(filled(p.skills.map((s) => s.name)), cx, y, cw, { field: 'skills', codec: 'skillNames' }, 16);
+  const rows: [ContentKey, string, string, string][] = [
+    ['tools', 'Outils', filled(p.tools).join('  ·  '), 'list'],
+    ['languages', 'Langues', languagesText(p), 'languages'],
+    ['interests', 'Intérêts', filled(p.interests).join('  ·  '), 'list'],
   ];
-  for (const [label, value, field, codec] of rows) {
+  for (const [field, label, value, codec] of rows) {
     if (!value) continue;
-    b.text(label, M, y, dateW - 10, { fontSize: 9, fill: P.muted });
+    b.text(b.label(field, label), M, y, dateW - 10, { fontSize: 9, fill: P.muted, heading: 3 });
     y = b.para(value, cx, y, cw, { field, codec }, 7);
   }
+  for (const k of ['skills', 'tools', 'languages', 'interests'] as const) y = b.customs(k, y, { ...extra, lead: 9, gap: 0 });
   b.spread(y, H - 50);
   return b.json();
 }
@@ -200,46 +247,55 @@ export async function banner(P: Palette, p: Persona, density = 1) {
   const w = sideX - M - 26;
   let y = headH + 26;
   b.flow();
-  b.group('Profil');
-  y = b.heading('Profil', M, y, w);
-  y = b.para(p.profile, M, y, w, { field: 'profile' }, 14);
-  b.group('Expérience');
-  y = b.heading('Expérience', M, y, w);
-  p.experience.forEach((e, i) => (y = b.entry(e, M, y, w, { datesRight: false, path: `experience.${i}` })));
-  y += b.g(4);
-  b.group('Formation');
-  y = b.heading('Formation', M, y, w);
-  p.education.forEach((e, i) => (y = b.entry(e, M, y, w, { datesRight: false, gap: 6, path: `education.${i}` })));
+  const main = { x: M, w, heading: (t: string, yy: number) => b.heading(t, M, yy, w), entryOpts: { datesRight: false }, gap: 12 };
+  if (b.has('profile')) {
+    y = b.heading(b.section('profile', 'Profil'), M, y, w);
+    y = b.para(p.profile, M, y, w, { field: 'profile' }, 14);
+  }
+  y = b.customs('profile', y, main);
+  if (b.has('experience')) {
+    y = b.heading(b.section('experience', 'Expérience'), M, y, w);
+    p.experience.forEach((e, i) => (y = b.entry(e, M, y, w, { datesRight: false, path: `experience.${i}` })));
+    y += b.g(4);
+  }
+  y = b.customs('experience', y, main);
+  y = b.customs('achievements', y, main);
+  if (b.has('education')) {
+    y = b.heading(b.section('education', 'Formation'), M, y, w);
+    p.education.forEach((e, i) => (y = b.entry(e, M, y, w, { datesRight: false, gap: 6, path: `education.${i}` })));
+  }
+  y = b.customs('education', y, { ...main, lead: 6, gap: 0 });
   b.spread(y, H - 40);
 
   // Colonne latérale (1/3)
   const sx = sideX + 22;
   const sw = W - sx - 24;
+  const side = { x: sx, w: sw, heading: (t: string, yy: number) => b.heading(t, sx, yy, sw, 'caps'), body: { fontSize: 8.8 }, entryOpts: { datesRight: false, gap: 6 }, gap: 10 };
   y = headH + 26;
   b.flow();
   b.group('Contact');
   y = b.heading('Contact', sx, y, sw, 'caps');
   y = b.iconList(contacts(p), sx, y, sw, P.text, P.secondary, 8.5, 6) + b.g(10);
   if (filled(p.skills.map((s) => s.name)).length) {
-    b.group('Compétences');
-    y = b.heading('Compétences', sx, y, sw, 'caps');
+    y = b.heading(b.section('skills', 'Compétences'), sx, y, sw, 'caps');
     y = b.bars(p.skills, sx, y, sw, P.text, '#dfe3e8', P.secondary) + b.g(6);
   }
+  y = b.customs('skills', y, side);
   if (p.languages.some((l) => l.name.trim())) {
-    b.group('Langues');
-    y = b.heading('Langues', sx, y, sw, 'caps');
+    y = b.heading(b.section('languages', 'Langues'), sx, y, sw, 'caps');
     y = b.dots(p.languages, sx, y, sw, P.text, P.secondary, '#d5d9de') + b.g(8);
   }
+  y = b.customs('languages', y, side);
   if (filled(p.tools).length) {
-    b.group('Outils');
-    y = b.heading('Outils', sx, y, sw, 'caps');
+    y = b.heading(b.section('tools', 'Outils'), sx, y, sw, 'caps');
     y = b.tags(p.tools, sx, y, sw, '#ffffff', P.text, 8, 'tools') + b.g(6);
   }
+  y = b.customs('tools', y, side);
   if (filled(p.interests).length) {
-    b.group('Centres d’intérêt');
-    y = b.heading('Centres d’intérêt', sx, y, sw, 'caps');
+    y = b.heading(b.section('interests', 'Centres d’intérêt'), sx, y, sw, 'caps');
     y = b.iconList(interestIcons(p, [mdiRun, mdiCamera, mdiHandHeart]), sx, y, sw, P.text, P.secondary, 8.5, 6);
   }
+  y = b.customs('interests', y, { ...side, lead: 10, gap: 0 });
   b.spread(y, H - 40);
   return b.json();
 }
@@ -264,29 +320,53 @@ export async function sidebar(P: Palette, p: Persona, density = 1) {
   b.text(p.title.toUpperCase().replace(' de ', ' DE\n'), 295, 67, 280, { fontFamily: 'Montserrat', fontSize: 21, lineHeight: 1.12, fill: P.onPrimary, field: 'title', codec: 'joined' });
 
   // Panneaux de taille fixe : chaque section est vérifiée par rapport au bas de son panneau.
-  b.group('Compétences');
-  b.rect(279, 148, 285, 262, P.panel);
-  let y = b.heading('Compétences', 298, 160, 250, 'big');
-  const items = [...filled(p.skills.map((s) => s.name)), ...(filled(p.tools).length ? [`Outils : ${filled(p.tools).slice(0, 4).join(', ')}`] : [])];
-  const skills = b.text(items.map((i) => `•  ${i}`).join('\n'), 300, y + 2, 250, { lineHeight: 1.4, field: 'skills', codec: 'skillsTools' });
-  b.boldPrefix(skills, ' :');
-  b.check(y + 2 + skills.height, 400);
-  b.group('Expérience');
-  b.rect(279, 421, 285, 304, P.panel);
-  y = b.heading('Expérience', 298, 432, 250, 'big');
-  p.experience.forEach((e, i) => (y = b.entry(e, 300, y + 2, 250, { datesRight: false, gap: 6, path: `experience.${i}` })));
-  b.check(y, 725);
-  b.group('Formation');
-  b.rect(colX, 464, colW, 261, P.panel);
-  y = b.heading('Formation', 50, 478, 190, 'big');
-  p.education.forEach((e, i) => (y = b.entry(e, 52, y + 2, 186, { datesRight: false, gap: 6, path: `education.${i}` })));
-  if (p.languages.some((l) => l.name.trim())) y = b.para(languagesText(p).replace(/  ·  /g, '\n'), 52, y + 4, 186, { fontSize: 9, field: 'languages', codec: 'languages' });
-  b.check(y, 725);
-  b.group('Loisirs');
-  b.rect(0, 740, W, 47, P.secondary);
-  b.text('LOISIRS', 50, 750, 130, { fontFamily: 'Montserrat', fontSize: 22, fill: P.onPrimary });
-  const fun = b.text(filled(p.interests).join('  ·  '), 192, 759, 380, { fontSize: 10, fill: P.onPrimary, field: 'interests', codec: 'list' });
-  b.check(759 + fun.height, 787);
+  // Les sections ajoutées se placent dans le panneau de leur section d'ancrage (voir `hosts`).
+  const panel = (x: number, w: number) => ({
+    x: x + 2, w: w - 2, lead: 8, gap: 0, entryOpts: { datesRight: false, gap: 6 },
+    heading: (t: string, yy: number) => b.heading(t, x, yy, w, 'big') + 2,
+  });
+  // Chaque panneau appartient au groupe de sa section : on ouvre la section avant de le dessiner.
+  // Un panneau sans contenu (sections vides ou masquées, aucune section ajoutée) n'est pas dessiné.
+  const customIn = (...keys: ContentKey[]) => (p.custom ?? []).some((c) => keys.includes(c.after) && hasContent(c));
+  let y = 0;
+  if (b.has('skills') || b.has('tools') || customIn('skills', 'tools')) {
+    const title = b.section(b.has('skills') ? 'skills' : 'tools', 'Compétences');
+    b.rect(279, 148, 285, 262, P.panel);
+    y = b.heading(title, 298, 160, 250, 'big');
+    const items = [...filled(p.skills.map((s) => s.name)), ...(filled(p.tools).length ? [`Outils : ${filled(p.tools).slice(0, 4).join(', ')}`] : [])];
+    if (items.length) {
+      // Sans compétences (vides ou masquées), la ligne « Outils » a son propre codec : elle n'efface pas la liste masquée.
+      const skills = b.text(items.map((i) => `•  ${i}`).join('\n'), 300, y + 2, 250, { lineHeight: 1.4, field: b.has('skills') ? 'skills' : 'tools', codec: b.has('skills') ? 'skillsTools' : 'toolsLine' });
+      b.boldPrefix(skills, ' :');
+      y += 2 + skills.height;
+    }
+    for (const k of ['skills', 'tools'] as const) y = b.customs(k, y, panel(298, 250));
+    b.check(y, 400);
+  }
+  if (b.has('experience') || customIn('experience')) {
+    const title = b.section('experience', 'Expérience');
+    b.rect(279, 421, 285, 304, P.panel);
+    y = b.heading(title, 298, 432, 250, 'big');
+    p.experience.forEach((e, i) => (y = b.entry(e, 300, y + 2, 250, { datesRight: false, gap: 6, path: `experience.${i}` })));
+    y = b.customs('experience', y, { ...panel(298, 250), lead: 2 });
+    b.check(y, 725);
+  }
+  if (b.has('education') || b.has('languages') || customIn('education', 'languages')) {
+    const title = b.section(b.has('education') ? 'education' : 'languages', b.has('education') ? 'Formation' : 'Langues');
+    b.rect(colX, 464, colW, 261, P.panel);
+    y = b.heading(title, 50, 478, 190, 'big');
+    p.education.forEach((e, i) => (y = b.entry(e, 52, y + 2, 186, { datesRight: false, gap: 6, path: `education.${i}` })));
+    if (b.has('languages')) y = b.para(languagesText(p).replace(/  ·  /g, '\n'), 52, y + 4, 186, { fontSize: 9, field: 'languages', codec: 'languages' });
+    for (const k of ['education', 'languages'] as const) y = b.customs(k, y, panel(50, 190));
+    b.check(y, 725);
+  }
+  if (b.has('interests')) {
+    b.section('interests', 'Loisirs');
+    b.rect(0, 740, W, 47, P.secondary);
+    b.text(b.label('interests', 'Loisirs').toUpperCase(), 50, 750, 130, { fontFamily: 'Montserrat', fontSize: 22, fill: P.onPrimary, heading: 2 });
+    const fun = b.text(filled(p.interests).join('  ·  '), 192, 759, 380, { fontSize: 10, fill: P.onPrimary, field: 'interests', codec: 'list' });
+    b.check(759 + fun.height, 787);
+  }
   return b.json();
 }
 
@@ -309,51 +389,59 @@ export function tech(P: Palette, p: Persona, density = 1) {
   const mw = W - mx - 32;
   let y = headH + 24;
   b.flow();
-  b.group('Profil');
-  y = b.heading('Profil', mx, y, mw, 'bar');
-  y = b.para(p.profile, mx, y, mw, { field: 'profile' }, 14);
-  b.group('Expérience');
-  y = b.heading('Expérience', mx, y, mw, 'bar');
-  p.experience.forEach((e, i) => (y = b.entry(e, mx, y, mw, { datesRight: false, path: `experience.${i}` })));
-  y += b.g(4);
+  const main = { x: mx, w: mw, heading: (t: string, yy: number) => b.heading(t, mx, yy, mw, 'bar'), entryOpts: { datesRight: false }, gap: 12 };
+  if (b.has('profile')) {
+    y = b.heading(b.section('profile', 'Profil'), mx, y, mw, 'bar');
+    y = b.para(p.profile, mx, y, mw, { field: 'profile' }, 14);
+  }
+  y = b.customs('profile', y, main);
+  if (b.has('experience')) {
+    y = b.heading(b.section('experience', 'Expérience'), mx, y, mw, 'bar');
+    p.experience.forEach((e, i) => (y = b.entry(e, mx, y, mw, { datesRight: false, path: `experience.${i}` })));
+    y += b.g(4);
+  }
+  y = b.customs('experience', y, main);
   if (filled(p.achievements).length) {
-    b.group('Projets');
-    y = b.heading('Projets', mx, y, mw, 'bar');
+    y = b.heading(b.section('achievements', 'Projets'), mx, y, mw, 'bar');
     y = b.bullets(p.achievements, mx, y, mw, { field: 'achievements' }, 14);
   }
-  b.group('Formation');
-  y = b.heading('Formation', mx, y, mw, 'bar');
-  p.education.forEach((e, i) => (y = b.entry(e, mx, y, mw, { datesRight: false, gap: 6, path: `education.${i}` })));
+  y = b.customs('achievements', y, main);
+  if (b.has('education')) {
+    y = b.heading(b.section('education', 'Formation'), mx, y, mw, 'bar');
+    p.education.forEach((e, i) => (y = b.entry(e, mx, y, mw, { datesRight: false, gap: 6, path: `education.${i}` })));
+  }
+  y = b.customs('education', y, { ...main, lead: 6, gap: 0 });
   b.spread(y, H - 40);
 
   // Colonne latérale
   const sx = 26;
   const sw = sideW - 2 * sx + 6;
+  const side = { x: sx, w: sw, heading: (t: string, yy: number) => b.heading(t, sx, yy, sw, 'caps'), body: { fontSize: 8.8 }, entryOpts: { datesRight: false, gap: 6 }, gap: 10 };
   y = headH + 24;
   b.flow();
   b.group('Contact');
   y = b.heading('Contact', sx, y, sw, 'caps');
   y = b.iconList(contacts(p), sx, y, sw, P.text, P.secondary, 8.5, 6) + b.g(10);
   if (filled(p.tools).length) {
-    b.group('Stack technique');
-    y = b.heading('Stack technique', sx, y, sw, 'caps');
+    y = b.heading(b.section('tools', 'Stack technique'), sx, y, sw, 'caps');
     y = b.tags(p.tools, sx, y, sw, P.secondary, '#ffffff', 8, 'tools') + b.g(6);
   }
+  y = b.customs('tools', y, side);
   if (filled(p.skills.map((s) => s.name)).length) {
-    b.group('Savoir-faire');
-    y = b.heading('Savoir-faire', sx, y, sw, 'caps');
+    y = b.heading(b.section('skills', 'Savoir-faire'), sx, y, sw, 'caps');
     y = b.bullets(filled(p.skills.map((s) => s.name)), sx, y, sw, { fontSize: 8.8, field: 'skills', codec: 'skillNames' }, 14);
   }
+  y = b.customs('skills', y, side);
   if (p.languages.some((l) => l.name.trim())) {
-    b.group('Langues');
-    y = b.heading('Langues', sx, y, sw, 'caps');
+    y = b.heading(b.section('languages', 'Langues'), sx, y, sw, 'caps');
     y = b.dots(p.languages, sx, y, sw, P.text, P.secondary, '#d5d9de') + b.g(8);
   }
+  y = b.customs('languages', y, side);
   if (filled(p.interests).length) {
-    b.group('Intérêts');
-    y = b.heading('Intérêts', sx, y, sw, 'caps');
+    y = b.heading(b.section('interests', 'Intérêts'), sx, y, sw, 'caps');
     y = b.iconList(interestIcons(p, [mdiGithub, mdiImageFilterHdr, mdiCardsPlaying]), sx, y, sw, P.text, P.secondary, 8.5, 6);
   }
+  y = b.customs('interests', y, { ...side, lead: 10, gap: 0 });
   b.spread(y, H - 40);
   return b.json();
 }
@@ -371,38 +459,53 @@ export async function junior(P: Palette, p: Persona, density = 1) {
   await b.photo(W - 44 - 82, 34, 82);
   y = b.para(p.name, M, y, 330, { fontFamily: 'Montserrat', fontWeight: 'bold', fontSize: 25, fill: P.primary, lineHeight: 1, field: 'name' }, 5);
   y = b.para(p.title, M, y, 330, { fontSize: 13, fill: P.secondary, field: 'title' }, 4);
-  y = b.para(p.profile, M, y, 330, { fontSize: 9.5, fontWeight: 'bold', fill: P.text, field: 'profile' }, 8);
+  if (b.has('profile')) y = b.para(p.profile, M, y, 330, { fontSize: 9.5, fontWeight: 'bold', fill: P.text, field: 'profile' }, 8);
   y = Math.max(y, 126);
   y = b.para(inlineContacts(p), M, y, w, { fontSize: 9, fill: P.muted, field: 'contacts', codec: 'contacts' }, 16);
 
   b.flow();
-  b.group('Formation');
-  y = b.heading('Formation', M, y, w);
-  p.education.forEach((e, i) => (y = b.entry(e, M, y, w, { gap: 6, path: `education.${i}` })));
-  y += b.g(8);
+  const extra = { x: M, w, heading: (t: string, yy: number) => b.heading(t, M, yy, w), gap: 14 };
+  y = b.customs('profile', y, extra);
+  if (b.has('education')) {
+    y = b.heading(b.section('education', 'Formation'), M, y, w);
+    p.education.forEach((e, i) => (y = b.entry(e, M, y, w, { gap: 6, path: `education.${i}` })));
+    y += b.g(8);
+  }
+  y = b.customs('education', y, extra);
   if (filled(p.achievements).length) {
-    b.group('Projets');
-    y = b.heading('Projets', M, y, w);
+    y = b.heading(b.section('achievements', 'Projets'), M, y, w);
     y = b.bullets(p.achievements, M, y, w, { field: 'achievements' }, 14);
   }
-  b.group('Expériences');
-  y = b.heading('Expériences', M, y, w);
-  p.experience.forEach((e, i) => (y = b.entry(e, M, y, w, { path: `experience.${i}` })));
-  y += b.g(4);
+  y = b.customs('achievements', y, extra);
+  if (b.has('experience')) {
+    y = b.heading(b.section('experience', 'Expériences'), M, y, w);
+    p.experience.forEach((e, i) => (y = b.entry(e, M, y, w, { path: `experience.${i}` })));
+    y += b.g(4);
+  }
+  y = b.customs('experience', y, extra);
   if (filled(p.tools).length) {
-    b.group('Compétences et outils');
-    y = b.heading('Compétences et outils', M, y, w);
+    y = b.heading(b.section('tools', 'Compétences et outils'), M, y, w);
     y = b.tags(p.tools, M, y, w, P.panel, P.text, 8.5, 'tools') + b.g(8);
   }
+  y = b.customs('tools', y, extra);
+  y = b.customs('skills', y, extra);
+  // Langues et centres d'intérêt côte à côte ; une seule des deux : elle prend la première demi-colonne.
   const half = (w - 24) / 2;
-  b.group('Langues');
-  const y2 = b.heading('Langues', M, y, half);
-  const langEnd = b.para(languagesText(p).replace(/  ·  /g, '\n'), M, y2, half, { lineHeight: 1.5, field: 'languages', codec: 'languages' });
-  b.sameRow();
-  b.group('Centres d’intérêt');
-  const y3 = b.heading('Centres d’intérêt', M + half + 24, y, half);
-  const end = b.para(filled(p.interests).join('\n'), M + half + 24, y3, half, { lineHeight: 1.5, field: 'interests', codec: 'list' });
-  b.spread(Math.max(end, langEnd), H - 50);
+  let bottom = y;
+  let x = M;
+  if (b.has('languages')) {
+    const y2 = b.heading(b.section('languages', 'Langues'), x, y, half);
+    bottom = Math.max(bottom, b.para(languagesText(p).replace(/  ·  /g, '\n'), x, y2, half, { lineHeight: 1.5, field: 'languages', codec: 'languages' }));
+    x += half + 24;
+    if (b.has('interests')) b.sameRow();
+  }
+  if (b.has('interests')) {
+    const y3 = b.heading(b.section('interests', 'Centres d’intérêt'), x, y, half);
+    bottom = Math.max(bottom, b.para(filled(p.interests).join('\n'), x, y3, half, { lineHeight: 1.5, field: 'interests', codec: 'list' }));
+  }
+  y = bottom;
+  for (const k of ['languages', 'interests'] as const) y = b.customs(k, y, { ...extra, lead: 14, gap: 0 });
+  b.spread(y, H - 50);
   return b.json();
 }
 
@@ -524,29 +627,39 @@ export async function organic(P: Palette, p: Persona, density = 1) {
   };
   const leftHeading = (str: string, centered = false) => {
     b.mark();
-    const t = b.text(str, centered ? cx - cw / 2 : u(55), y, cw, { fontFamily: 'DM Serif Display', fontSize: 12.5, fill: ink, textAlign: centered ? 'center' : 'left' });
+    const t = b.text(str, centered ? cx - cw / 2 : u(55), y, cw, { fontFamily: 'DM Serif Display', fontSize: 12.5, fill: ink, textAlign: centered ? 'center' : 'left', heading: 2 });
     y += t.height + b.g(9);
   };
   const skills = filled(p.skills.map((s) => s.name));
   const langs = p.languages.filter((l) => l.name.trim());
+  const list = { fontFamily: 'Poppins', fontSize: 10.3, lineHeight: 1.55, fill: P.text };
+  const left = {
+    x: u(55), w: 180, body: list, gap: 10,
+    heading: (t: string, yy: number) => ((y = yy), dot(), leftHeading(t), y),
+    entry: (e: Entry, yy: number, path: string) => {
+      y = b.para(e.title, u(55), yy, 180, { ...list, fontFamily: 'DM Serif Display', lineHeight: 1.2, field: `${path}.title`, heading: 3 });
+      const line = [e.org, e.dates].filter(Boolean).join(', ');
+      if (line) y = b.para(line, u(55), y, 180, { ...list, fontSize: 9.2, lineHeight: 1.3, field: e.org && e.dates ? path : `${path}.${e.org ? 'org' : 'dates'}`, codec: e.org && e.dates ? 'orgDatesComma' : 'text' });
+      return y + b.g(6);
+    },
+  };
   if (skills.length || langs.length) {
     dot();
-    b.group('Compétences & qualités');
-    leftHeading('Compétences & qualités');
-    const list = { fontFamily: 'Poppins', fontSize: 10.3, lineHeight: 1.55, fill: P.text };
+    leftHeading(b.section('skills', 'Compétences & qualités'));
     if (skills.length) y = b.bullets(skills, u(55), y, 180, { ...list, field: 'skills', codec: 'skillNames' });
     // Les langues suivent les compétences avec le même interligne (deux textes, une seule liste à l'œil).
     if (skills.length && langs.length) y += list.fontSize * (list.lineHeight - 1.13);
     if (langs.length) y = b.bullets(langs.map((l) => (l.level ? `${l.name} (${l.level})` : l.name)), u(55), y, 180, { ...list, field: 'languages', codec: 'languages' });
     y += b.g(10);
   }
+  for (const k of ['skills', 'languages'] as const) y = b.customs(k, y, left);
   const fun = filled(p.interests);
   if (fun.length) {
     dot();
-    b.group('Loisirs');
-    leftHeading('Loisirs', true);
+    leftHeading(b.section('interests', 'Loisirs'), true);
     y = b.para(fun.join(', '), cx - cw / 2, y, cw, { ...center, field: 'interests', codec: 'commaList' });
   }
+  y = b.customs('interests', y, { ...left, lead: 10, gap: 0 });
   b.spread(y, H - 24, 18);
 
   // Colonne de droite : parcours centré
@@ -557,30 +670,35 @@ export async function organic(P: Palette, p: Persona, density = 1) {
   b.flow();
   const heading = (str: string) => {
     b.mark();
-    const t = b.text(str, u(440), y, rw, { fontFamily: 'Poppins', fontSize: 17, fill: ink });
+    const t = b.text(str, u(440), y, rw, { fontFamily: 'Poppins', fontSize: 17, fill: ink, heading: 2 });
     y += t.height + b.g(10);
   };
   const entryTitle = (str: string, field: string) => {
-    const t = b.text(str, rx, y, rw, { fontFamily: 'DM Serif Display', fontSize: 10, lineHeight: 1.15, fill: P.text, textAlign: 'center', field });
+    const t = b.text(str, rx, y, rw, { fontFamily: 'DM Serif Display', fontSize: 10, lineHeight: 1.15, fill: P.text, textAlign: 'center', field, heading: 3 });
     y += t.height + 2;
   };
+  const entry = (e: Entry, path: string) => {
+    entryTitle(e.title, `${path}.title`);
+    if (e.org) y = b.para(e.org, rx, y, rw, { ...body, field: `${path}.org` });
+    if (e.dates) y = b.para(e.dates, rx, y, rw, { ...body, field: `${path}.dates` });
+    if (e.text) y = b.para(e.text, rx, y + 2, rw, { ...body, fontSize: 9.2, fill: P.muted, field: `${path}.text` });
+    if (e.bullets?.length) y = b.bullets(e.bullets, rx, y + 2, rw, { ...body, fontSize: 9.2, lineHeight: 1.35, fill: P.muted, field: `${path}.bullets` });
+    y += b.g(15);
+    return y;
+  };
+  const right = {
+    x: rx, w: rw, body: { ...body, fontSize: 9.5, lineHeight: 1.35 }, gap: 15,
+    heading: (t: string, yy: number) => ((y = yy), heading(t), y),
+    entry: (e: Entry, yy: number, path: string) => ((y = yy), entry(e, path)),
+  };
   if (p.experience.length) {
-    b.group('Expériences');
-    heading('Expériences');
-    p.experience.forEach((e, i) => {
-      const path = `experience.${i}`;
-      entryTitle(e.title, `${path}.title`);
-      if (e.org) y = b.para(e.org, rx, y, rw, { ...body, field: `${path}.org` });
-      if (e.dates) y = b.para(e.dates, rx, y, rw, { ...body, field: `${path}.dates` });
-      if (e.text) y = b.para(e.text, rx, y + 2, rw, { ...body, fontSize: 9.2, fill: P.muted, field: `${path}.text` });
-      if (e.bullets?.length) y = b.bullets(e.bullets, rx, y + 2, rw, { ...body, fontSize: 9.2, lineHeight: 1.35, fill: P.muted, field: `${path}.bullets` });
-      y += b.g(15);
-    });
+    heading(b.section('experience', 'Expériences'));
+    p.experience.forEach((e, i) => entry(e, `experience.${i}`));
   }
+  y = b.customs('experience', y, right);
   if (p.education.length) {
     y += b.g(4);
-    b.group('Formations');
-    heading('Formations');
+    heading(b.section('education', 'Formations'));
     p.education.forEach((e, i) => {
       const path = `education.${i}`;
       entryTitle(e.title, `${path}.title`);
@@ -589,6 +707,62 @@ export async function organic(P: Palette, p: Persona, density = 1) {
       y += b.g(9);
     });
   }
+  y = b.customs('education', y, { ...right, lead: 6, gap: 0 });
   b.spread(y, H - 20, 12);
+  return b.json();
+}
+
+// ------------------------------------------------------------------ 11. Vierge
+
+/**
+ * Page qui se construit au fil du formulaire : une colonne sobre, chaque partie n'apparaît
+ * qu'une fois remplie (rien d'affiché pour une fiche vide). Idéale pour les outils de tri.
+ */
+export async function blank(P: Palette, p: Persona, density = 1) {
+  const b = new Builder(P, p, density);
+  const M = 56;
+  const w = W - 2 * M;
+  const top = 56;
+  let y = top;
+  const photo = 84;
+  const headW = p.photo ? w - photo - 20 : w;
+
+  b.group('En-tête');
+  if (p.photo) await b.photo(W - M - photo, top - 4, photo);
+  if (p.name.trim()) y = b.para(p.name, M, y, headW, { fontFamily: 'Montserrat', fontWeight: 'bold', fontSize: 24, fill: P.primary, lineHeight: 1.05, field: 'name' }, 6);
+  if (p.title.trim()) y = b.para(p.title, M, y, headW, { fontSize: 12.5, fill: P.secondary, field: 'title' }, 8);
+  // Une coordonnée par ligne (chacune reliée à son champ : un champ vide ne décale pas les autres).
+  y = b.iconList(contacts(p), M, y, headW, P.muted, P.secondary, 9, 4);
+  if (p.photo) y = Math.max(y, top + photo);
+  if (y > top) {
+    y += b.g(6);
+    b.line(M, y, M + w, y, P.primary, 1.2);
+    y += b.g(16);
+  }
+
+  b.flow();
+  const extra = { x: M, w, heading: (t: string, yy: number) => b.heading(t, M, yy, w), gap: 14 };
+  const block = (key: ContentKey, title: string, draw: () => void) => {
+    if (b.has(key)) {
+      y = b.heading(b.section(key, title), M, y, w);
+      draw();
+    }
+    y = b.customs(key, y, extra);
+  };
+  block('profile', 'Profil', () => (y = b.para(p.profile, M, y, w, { field: 'profile' }, 14)));
+  block('experience', 'Expérience professionnelle', () => {
+    p.experience.forEach((e, i) => (y = b.entry(e, M, y, w, { path: `experience.${i}` })));
+    y += b.g(5);
+  });
+  block('education', 'Formation', () => {
+    p.education.forEach((e, i) => (y = b.entry(e, M, y, w, { gap: 6, path: `education.${i}` })));
+    y += b.g(8);
+  });
+  block('achievements', 'Réalisations', () => (y = b.bullets(p.achievements, M, y, w, { field: 'achievements' }, 14)));
+  block('skills', 'Compétences', () => (y = b.bullets(filled(p.skills.map((s) => s.name)), M, y, w, { field: 'skills', codec: 'skillNames' }, 14)));
+  block('tools', 'Outils', () => (y = b.para(filled(p.tools).join('  ·  '), M, y, w, { field: 'tools', codec: 'list' }, 14)));
+  block('languages', 'Langues', () => (y = b.para(languagesText(p), M, y, w, { field: 'languages', codec: 'languages' }, 14)));
+  block('interests', 'Centres d’intérêt', () => (y = b.para(filled(p.interests).join('  ·  '), M, y, w, { field: 'interests', codec: 'list' }, 14)));
+  b.check(y, H - 40);
   return b.json();
 }
